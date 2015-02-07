@@ -1021,6 +1021,12 @@ static void usage(void)
 	fprintf(stderr, "   --vortex-size-variance: Range of vortex sizes, default is plus or minus 0.02\n");
 	fprintf(stderr, "   -z, --noise-scale: default is %f\n", default_noise_scale);
 	fprintf(stderr, "\n");
+	fprintf(stderr, "Example:\n");
+        fprintf(stderr, "\n");
+	fprintf(stderr, "   ./gaseous-giganticus -V --sinusoidal --noise-scale 2.5 "
+			"--velocity-factor 1300 \\\n"
+			"        -i image.png -o p13 --bands 10\n");
+	fprintf(stderr, "\n");
 	exit(1);
 }
 
