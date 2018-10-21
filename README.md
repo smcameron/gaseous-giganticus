@@ -53,3 +53,24 @@ Please read CONTRIBUTING.md
 
 GNU GPL v. 2
 
+## Notes
+
+On Sunday, October 21, 2018, this code was split off from the Space
+Nerds In Space repository at https://github.com/smcameron/space-nerds-in-space
+where the code was originally developed.
+
+An effort was made to preserve the history (git log, etc), and this
+effort was 99.9% successful, but there are a few small differences from
+the original history. Most significantly, the Makefile does not exist for
+most of the history in this repository because the Makefile used in
+Space Nerds In Space would have been broken anyway and would have
+contained tons of irrelevant cruft. The Makefile in this repository was
+added only after the entire gaseous-giganticus history was imported.
+Less significantly, a few commits were made out-of-order, and although
+the original dates were preserved in the log, checking out a particular
+sha you may find some small differences if you compare with what was in
+the Space Nerds In Space repository at a corresponding time. At the time
+the Makefile was added to this repository, all source files present here
+were identical to those also present in the Space Nerds In Space
+repository, meaning those small differences were resolved eventually.
+
