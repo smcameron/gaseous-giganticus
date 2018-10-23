@@ -29,6 +29,12 @@ The layout of those six output images is as follows:
 
 ```
 
+If you wish to watch the progress of the program while it works, you'll need to compile and run
+"mesh_viewer", which is part of [Space Nerds In Space](https://github.com/smcameron/space-nerds-in-space).
+
+[Here is a video demoing the gaseous-giganticus and mesh_viewer](https://www.youtube.com/watch?v=8nx5yPpQh2M).
+This video is a bit old, and I should probably make a new one, but it will have to suffice for now.
+
 ### Prerequisites
 
 1. libpng
@@ -40,6 +46,9 @@ The layout of those six output images is as follows:
 TLDR: Tabs, not spaces, snake_case, not CamelCase.
 
 ## Contributing
+
+To gain an understanding of how the program works, see [this slideshow](https://smcameron.github.io/space-nerds-in-space/gaseous-giganticus-slides/slideshow.html#1).
+Use arrow keys to navigate.  That slideshow does not work well on mobile, so find a real computer.
 
 Please read CONTRIBUTING.md
 
