@@ -3,6 +3,15 @@
 This program is used to create procedurally generated gas giant planet cubemap
 textures for the game Space Nerds In Space.
 
+# Sample Output
+
+The output of gaseous-giganticus consists of six square images that can be used as a
+cubemap to texture a sphere.  Here the output is viewed with "mesh_viewer", from the
+space-nerds-in-space repository.
+
+![sample-gg-output-1.jpg](sample-gg-output-1.jpg?raw=true "gaseous-giganticus output")
+![sample-gg-output-2.jpg](sample-gg-output-2.jpg?raw=true "gaseous-giganticus output")
+
 ## Getting Started
 
 1. clone the project
