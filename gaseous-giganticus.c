@@ -1419,10 +1419,18 @@ static int get_num_cpus()
 	return sysinfo.dwNumberOfProcessors;
 }
 #else
+#ifdef __linux
 static int get_num_cpus()
 {
 	return sysconf(_SC_NPROCESSORS_ONLN);
 }
+#else
+#warning "get_num_cpus() not found. Assuming 1 CPU. Performance will not be good."
+static int get_num_cpus()
+{
+	return 1;
+}
+#endif
 #endif
 
 int main(int argc, char *argv[])
