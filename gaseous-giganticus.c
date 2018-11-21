@@ -1410,6 +1410,21 @@ static void create_vortices()
 		create_vortex(i);
 }
 
+#ifdef _WIN32
+#include <windows.h>
+static int get_num_cpus()
+{
+	SYSTEM_INFO sysinfo;
+	GetSystemInfo(&sysinfo);
+	return sysinfo.dwNumberOfProcessors;
+}
+#else
+static int get_num_cpus()
+{
+	return sysconf(_SC_NPROCESSORS_ONLN);
+}
+#endif
+
 int main(int argc, char *argv[])
 {
 	int i, t;
@@ -1436,7 +1451,7 @@ int main(int argc, char *argv[])
 
 	check_vf_dump_file(vf_dump_file);
 
-	int num_online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+	int num_online_cpus = get_num_cpus();
 	if (num_online_cpus > 0)
 		nthreads = num_online_cpus;
 	if (user_threads > 0 && user_threads < num_online_cpus)
