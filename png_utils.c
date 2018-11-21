@@ -34,7 +34,7 @@ int png_utils_write_png_image(const char *filename, unsigned char *pixels, int w
 	FILE *f;
 
 	rc = -1; /* assume failure until we eventually succeed */
-	f = fopen(filename, "w");
+	f = fopen(filename, "wb");
 	if (!f) {
 		fprintf(stderr, "fopen: %s:%s\n", filename, strerror(errno));
 		return -1;
