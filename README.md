@@ -59,11 +59,14 @@ TLDR: Tabs, not spaces, snake_case, not CamelCase.
 To gain an understanding of how the program works, see [this slideshow](https://smcameron.github.io/space-nerds-in-space/gaseous-giganticus-slides/slideshow.html#1).
 Use arrow keys to navigate.  That slideshow does not work well on mobile, so find a real computer.
 
-If you're looking for a challenge, it would be really cool to do a more proper fluid simulation.  This could *probably* be done by
+If you're looking for a challenge, it would be really cool to do a more proper fluid simulation.
+This could *probably* be done by
 advecting the velocity field and then eliminating divergence from it, something like
 [what is described here](https://www.karlsims.com/fluid-flow.html),
 except done on the surface of a sphere instead of on a plane.  The velocity field is contained
 in the [vf structure](https://github.com/smcameron/gaseous-giganticus/blob/master/gaseous-giganticus.c#L115).
+Some framework code is already in place, we "just" need to implement the body of the functions
+advect_velocity_field() and remove_divergences().
 
 Please read CONTRIBUTING.md
 

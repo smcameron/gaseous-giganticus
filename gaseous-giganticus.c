@@ -82,6 +82,7 @@ static const int max_noise_levels = 7;
 static int cloudmode = 0;
 static float fade_rate = -1.0;
 static int save_texture_sequence = 0;
+static int magic_fluid_flow = 0; /* 0 = skip fluid dynamics, 1 = do fluid dynamics (not yet implemented) */
 
 #define DIM 1024 /* dimensions of cube map face images */
 #define VFDIM 2048 /* dimension of velocity field. (2 * DIM) is reasonable */
@@ -114,7 +115,7 @@ static int large_pixels = 0;
 /* velocity field for 6 faces of a cubemap */
 static struct velocity_field {
 	union vec3 v[6][VFDIM][VFDIM];
-} vf;
+} vf, old_vf; /* old_vf is used in advection and divergence removal steps */
 
 struct color {
 	float r, g, b, a;
@@ -1066,6 +1067,7 @@ static struct option long_options[] = {
 	{ "particles", required_argument, NULL, 'p' },
 	{ "plainmap", required_argument, NULL, 'P' },
 	{ "speed-multiplier", required_argument, NULL, 'm' },
+	{ "magic-fluid-flow", no_argument, NULL, 'M'},
 	{ "vfdim", required_argument, NULL, 'F' },
 	{ "wstep", required_argument, NULL, 'W' },
 	{ "wstep-period", required_argument, NULL, 'q' },
@@ -1226,6 +1228,9 @@ static void process_options(int argc, char *argv[])
 			break;
 		case 'm':
 			process_float_option("speed-multiplier", optarg, &speed_multiplier);
+			break;
+		case 'M':
+			magic_fluid_flow = 1;
 			break;
 		case 'n':
 			nofade = 1;
@@ -1433,6 +1438,47 @@ static int get_num_cpus()
 #endif
 #endif
 
+static void advect_velocity_field(void)
+{
+	/* TODO: simulate fluid momentum via lagrangian advection of velocity field.
+	 * See: https://www.karlsims.com/fluid-flow.html
+	 * The basic idea is as follows:
+	 * For each velocity vector, look backwards (negate the vector) and find
+	 * where that spot is.  Then use bilinear interpolation of the surrounding
+	 * 4 velocity vectors to figure what the velocity vector at that point was,
+	 * and that becomes the new velocity vector.
+	 *
+	 * There will need to be additional steps of flattening the local region
+	 * to a plane, doing the advection step as above, then projecting back onto
+	 * the sphere.
+	 *
+	 * This advection step should be "embarassingly parallel" because the new
+	 * velocity field (vf) depends only on the old one (old_vf) which is not
+	 * mutated.
+	 */
+}
+
+static void remove_divergences(void)
+{
+	/* TODO: figure out how to remove divergences introduced by advection step
+	 * from velocity field. See: https://www.karlsims.com/fluid-flow.html
+	 *
+	 * "... the flow field is repeatedly incremented by the gradient of its divergence.
+	 * A gradient is the slope or rate of change of a value across the grid."
+	 *
+	 * I do not really have a good understanding of how to do this step.
+	 */
+}
+
+static void do_fluid_dynamics(void)
+{
+	if (!magic_fluid_flow)
+		return;
+	memcpy(&old_vf, &vf, sizeof(old_vf));
+	advect_velocity_field();
+	remove_divergences();
+}
+
 int main(int argc, char *argv[])
 {
 	int i, t;
@@ -1512,6 +1558,7 @@ int main(int argc, char *argv[])
 		for (t = 0; t < nthreads; t++)
 			move_particles(particle, &ti[t], &vf);
 		wait_for_movement_threads(ti, nthreads);
+		do_fluid_dynamics();
 		gettimeofday(&moveend, NULL);
 		move_elapsed.tv_sec += moveend.tv_sec - movebegin.tv_sec;
 		imagebegin = moveend;
