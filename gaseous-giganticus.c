@@ -115,9 +115,11 @@ static int random_mode;
 static int large_pixels = 0;
 
 /* velocity field for 6 faces of a cubemap */
-static struct velocity_field {
+struct velocity_field {
 	union vec3 v[6][VFDIM][VFDIM];
-} vf, old_vf; /* old_vf is used in advection and divergence removal steps */
+};
+
+static struct velocity_field *vf, *old_vf; /* old_vf is used in advection and divergence removal steps */
 
 struct color {
 	float r, g, b, a;
@@ -1571,7 +1573,7 @@ static void do_fluid_dynamics(void)
 {
 	if (!magic_fluid_flow)
 		return;
-	memcpy(&old_vf, &vf, sizeof(old_vf));
+	memcpy(old_vf, vf, sizeof(struct velocity_field));
 	advect_velocity_field();
 	remove_divergences();
 }
@@ -1590,6 +1592,16 @@ int main(int argc, char *argv[])
 	move_elapsed.tv_usec = 0;
 	image_elapsed.tv_sec = 0;
 	image_elapsed.tv_usec = 0;
+
+	/* Allocate a ton of memory. We allocate these rather than
+	 * declaring them statically because if DIM is too large, the
+	 * static data will not fit into the .bss (see https://en.wikipedia.org/wiki/.bss)
+	 */
+	vf = malloc(sizeof(struct velocity_field));
+	if (magic_fluid_flow)
+		old_vf = malloc(sizeof(struct velocity_field));
+	else
+		old_vf = NULL;
 
 	open_simplex_noise(3141592, &ctx);
 
@@ -1639,9 +1651,9 @@ int main(int argc, char *argv[])
 	printf("width, height, bytes per row = %d,%d,%d\n",
 			start_image_width, start_image_height, start_image_bytes_per_row);
 	init_particles(&particle, particle_count);
-	if (restore_velocity_field(vf_dump_file, &vf))
-		update_velocity_field(&vf, noise_scale, w_offset, &use_wstep);
-	dump_velocity_field(vf_dump_file, &vf, use_wstep);
+	if (restore_velocity_field(vf_dump_file, vf))
+		update_velocity_field(vf, noise_scale, w_offset, &use_wstep);
+	dump_velocity_field(vf_dump_file, vf, use_wstep);
 
 	for (i = 0; i < niterations; i++) {
 		if ((i % 50) == 0)
@@ -1653,7 +1665,7 @@ int main(int argc, char *argv[])
 
 		gettimeofday(&movebegin, NULL);
 		for (t = 0; t < nthreads; t++)
-			move_particles(particle, &ti[t], &vf);
+			move_particles(particle, &ti[t], vf);
 		wait_for_movement_threads(ti, nthreads);
 		do_fluid_dynamics();
 		gettimeofday(&moveend, NULL);
@@ -1669,8 +1681,8 @@ int main(int argc, char *argv[])
 		}
 		if (use_wstep && (i % wstep_period == 0)) {
 			w_offset += wstep;
-			update_velocity_field(&vf, noise_scale, w_offset, &use_wstep);
-			dump_velocity_field(vf_dump_file, &vf, use_wstep);
+			update_velocity_field(vf, noise_scale, w_offset, &use_wstep);
+			dump_velocity_field(vf_dump_file, vf, use_wstep);
 		}
 	}
 	if (last_imaged_iteration != i - 1) {
@@ -1679,6 +1691,12 @@ int main(int argc, char *argv[])
 	}
 	printf("\n%5d / %5d -- done.\n", i, niterations);
 	open_simplex_noise_free(ctx);
+
+	/* free a ton of memory */
+	free(vf);
+	if (old_vf)
+		free(old_vf);
+
 	return 0;
 }
 
