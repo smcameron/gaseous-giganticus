@@ -104,7 +104,7 @@ static float opacity_limit = 0.2;
 static float pole_attenuation = 0.5;
 
 static char *start_image;
-static char *cubemap_image[6] = { 0 };
+static unsigned char *cubemap_image[6] = { 0 };
 static int start_image_width, start_image_height, start_image_has_alpha, start_image_bytes_per_row;
 static unsigned char *output_image[6];
 static int image_save_period = 20;
@@ -1337,6 +1337,27 @@ static void process_options(int argc, char *argv[])
 	return;
 }
 
+static void copy_cubemap_face_to_output_face(unsigned char *image, int face, int width, int height)
+{
+	int x, y, ix, iy, ip, op;
+	unsigned char *input_pixel, *output_pixel;
+
+	for (y = 0; y < DIM; y++) {
+		for (x = 0; x < DIM; x++) {
+			ix = (x * width) / DIM;
+			iy = (y * height) / DIM;
+			ip = y * DIM + x;
+			op = iy * width + ix;
+			input_pixel = &image[ip * 4];
+			output_pixel = &output_image[face][op * 4];
+			output_pixel[0] = input_pixel[0];
+			output_pixel[1] = input_pixel[1];
+			output_pixel[2] = input_pixel[2];
+			output_pixel[3] = 255;
+		}
+	}
+}
+
 static void load_cubemap_images(const char *prefix)
 {
 	char filename[PATH_MAX];
@@ -1344,9 +1365,13 @@ static void load_cubemap_images(const char *prefix)
 
 	for (i = 0; i < 6; i++) {
 		sprintf(filename, "%s%d.png", prefix, i);
-		cubemap_image[i] = load_image(filename, &start_image_width, &start_image_height,
+		cubemap_image[i] = (unsigned char *) load_image(filename, &start_image_width, &start_image_height,
 						&start_image_has_alpha, &start_image_bytes_per_row);
 	}
+	/* Copy the cubemap images directly to the output images as a starting point. */
+	for (i = 0; i < 6; i++)
+		copy_cubemap_face_to_output_face(cubemap_image[i], i,
+				start_image_width, start_image_height);
 }
 
 /* Return a value between -1.0 and 1.0 with a bias towards zero.
