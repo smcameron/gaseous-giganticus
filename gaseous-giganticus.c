@@ -98,6 +98,8 @@ static float speed_multiplier = 1.0;
 static float velocity_factor = 1200.0;
 static float num_bands = 6.0f;
 static float band_speed_factor = 2.9f;
+static int band_speed_power = 1;
+static float band_speed_powerf = 1.0;
 static int vertical_bands = 1;
 static float opacity = 1.0;
 static float opacity_limit = 0.2;
@@ -559,8 +561,9 @@ static union vec3 curl2(union vec3 pos, union vec3 normalized_pos,
 
 static float calculate_band_speed(float latitude)
 {
+	/* to the 5th power to make regions between bands wider. */
 	return ((1 - pole_attenuation) + pole_attenuation *
-		cosf(latitude)) * cosf(latitude * num_bands) * band_speed_factor;
+		cosf(latitude)) * powf(cosf(latitude * num_bands), band_speed_powerf) * band_speed_factor;
 }
 
 struct velocity_field_thread_info {
@@ -969,6 +972,10 @@ static void usage(void)
 	fprintf(stderr, "   -c, --count : Number of iterations to run the simulation.\n");
 	fprintf(stderr, "                 Default is 1000\n");
 	fprintf(stderr, "   -C, --cloudmode: modulate image output by to produce clouds\n");
+	fprintf(stderr, "   -e, --band-speed-power: Band speed is modulated by\n");
+	fprintf(stderr, "	cos(K*latitude) ^ band-speed-power, where band-speed-power is an\n");
+	fprintf(stderr, "	odd integer. By default, 1, higher values make the fast moving part\n");
+	fprintf(stderr, "	of the bands narrow and the parts between wider.\n");
 	fprintf(stderr, "   -f, --fbm-falloff: Use specified falloff for FBM noise.  Default is 0.5\n");
 	fprintf(stderr, "   -g, --gain, 2nd and later octaves are multiplied by pow(fbm-falloff, (octave-1)*gain)\n");
 	fprintf(stderr, "   -F, --vfdim: Set size of velocity field.  Default:2048. Min: 16. Max: 2048\n");
@@ -1077,6 +1084,7 @@ static struct option long_options[] = {
 	{ "vortex-size", required_argument, NULL, VORTEX_SIZE_OPTION },
 	{ "vortex-size-variance", required_argument, NULL, VORTEX_SIZE_VARIANCE_OPTION },
 	{ "noise-scale", required_argument, NULL, 'z' },
+	{ "band-speed-power", required_argument, NULL, 'e' },
 	{ 0, 0, 0, 0 },
 };
 
@@ -1143,7 +1151,7 @@ static void process_options(int argc, char *argv[])
 
 	while (1) {
 		int option_index;
-		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:f:g:F:hHi:k:I:lL:nNm:o:O:p:PRr:sSt:Vv:w:W:x:z:",
+		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:e:f:g:F:hHi:k:I:lL:nNm:o:O:p:PRr:sSt:Vv:w:W:x:z:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -1173,6 +1181,14 @@ static void process_options(int argc, char *argv[])
 			break;
 		case 'D':
 			process_float_option("faderate", optarg, &fade_rate);
+			break;
+		case 'e':
+			process_int_option("band-speed-power", optarg, &band_speed_power);
+			if (band_speed_power < 0 || (band_speed_power % 2) != 1) {
+				fprintf(stderr, "band-speed-power must be an odd integer\n");
+				usage();
+			}
+			band_speed_powerf = (float) band_speed_power;
 			break;
 		case 'r':
 			vf_dump_file = optarg;
