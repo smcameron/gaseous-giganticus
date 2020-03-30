@@ -216,25 +216,25 @@ static void fade_out_background(int f, struct color *c)
 
 static union vec3 fij_to_xyz(int f, int i, int j, const int dim);
 
-static inline float fbmnoise4_1oct(float x, float y, float z, float w)
+static float fbmnoise4_1oct(float x, float y, float z, float w)
 {
 	return	ff[0] * open_simplex_noise4(ctx, x, y, z, w);
 }
 
-static inline float fbmnoise4_2oct(float x, float y, float z, float w)
+static float fbmnoise4_2oct(float x, float y, float z, float w)
 {
 	return	ff[0] * open_simplex_noise4(ctx, x, y, z, w) +
 		ff[1] * open_simplex_noise4(ctx, 2.0f * x, 2.0f * y, 2.0f * z, 2.0f * w);
 }
 
-static inline float fbmnoise4_3oct(float x, float y, float z, float w)
+static float fbmnoise4_3oct(float x, float y, float z, float w)
 {
 	return	ff[0] * open_simplex_noise4(ctx, x, y, z, w) +
 		ff[1] * open_simplex_noise4(ctx, 2.0f * x, 2.0f * y, 2.0f * z, 2.0f * w) +
 		ff[2] * open_simplex_noise4(ctx, 4.0f * x, 4.0f * y, 4.0f * z, 4.0f * w);
 }
 
-static inline float fbmnoise4_4oct(float x, float y, float z, float w)
+static float fbmnoise4_4oct(float x, float y, float z, float w)
 {
 	return	ff[0] * open_simplex_noise4(ctx, x, y, z, w) +
 		ff[1] * open_simplex_noise4(ctx, 2.0f * x, 2.0f * y, 2.0f * z, 2.0f * w) +
@@ -242,7 +242,7 @@ static inline float fbmnoise4_4oct(float x, float y, float z, float w)
 		ff[3] * open_simplex_noise4(ctx, 8.0f * x, 8.0f * y, 8.0f * z, 8.0f * w);
 }
 
-static inline float fbmnoise4_5oct(float x, float y, float z, float w)
+static float fbmnoise4_5oct(float x, float y, float z, float w)
 {
 	return	ff[0] * open_simplex_noise4(ctx, x, y, z, w) +
 		ff[1] * open_simplex_noise4(ctx, 2.0f * x, 2.0f * y, 2.0f * z, 2.0f * w) +
@@ -251,7 +251,7 @@ static inline float fbmnoise4_5oct(float x, float y, float z, float w)
 		ff[4] * open_simplex_noise4(ctx, 16.0f * x, 16.0f * y, 16.0f * z, 16.0f * w);
 }
 
-static inline float fbmnoise4_6oct(float x, float y, float z, float w)
+static float fbmnoise4_6oct(float x, float y, float z, float w)
 {
 	return	ff[0] * open_simplex_noise4(ctx, x, y, z, w) +
 		ff[1] * open_simplex_noise4(ctx, 2.0f * x, 2.0f * y, 2.0f * z, 2.0f * w) +
@@ -261,7 +261,7 @@ static inline float fbmnoise4_6oct(float x, float y, float z, float w)
 		ff[5] * open_simplex_noise4(ctx, 32.0f * x, 32.0f * y, 32.0f * z, 32.0f * w);
 }
 
-static inline float fbmnoise4_7oct(float x, float y, float z, float w)
+static float fbmnoise4_7oct(float x, float y, float z, float w)
 {
 	return	ff[0] * open_simplex_noise4(ctx, x, y, z, w) +
 		ff[1] * open_simplex_noise4(ctx, 2.0f * x, 2.0f * y, 2.0f * z, 2.0f * w) +
@@ -272,7 +272,7 @@ static inline float fbmnoise4_7oct(float x, float y, float z, float w)
 		ff[6] * open_simplex_noise4(ctx, 64.0f * x, 64.0f * y, 64.0f * z, 64.0f * w);
 }
 
-static float (*fbmnoise4[7])(float x, float y, float z, float w) = {
+static float (*const fbmnoise4[])(float x, float y, float z, float w) = {
 	fbmnoise4_1oct,
 	fbmnoise4_2oct,
 	fbmnoise4_3oct,
@@ -282,7 +282,7 @@ static float (*fbmnoise4[7])(float x, float y, float z, float w) = {
 	fbmnoise4_7oct,
 };
 
-static void paint_particle(int face, int i, int j, struct color *c)
+static void paint_particle(int face, int i, int j, struct color *c, const int octaves)
 {
 	unsigned char *pixel;
 	int p;
@@ -322,7 +322,7 @@ static void paint_particle(int face, int i, int j, struct color *c)
 		v = fij_to_xyz(face, i, j, DIM);
 		vec3_normalize_self(&v);
 		vec3_mul_self(&v, 3.6 * noise_scale);
-		n = fbmnoise4[noise_levels - 1](v.v.x, v.v.y, v.v.z, (w_offset + 10.0) * 3.33f);
+		n = fbmnoise4[octaves](v.v.x, v.v.y, v.v.z, (w_offset + 10.0) * 3.33f);
 		if (n > 0.5f)
 			n = n * (1.0 + n - 0.5);
 		if (n < 0.0f)
@@ -581,13 +581,12 @@ static void init_particles(struct particle **pp, const int nparticles)
 }
 
 /* compute the noise gradient at the given point on the surface of a sphere */
-static union vec3 noise_gradient(union vec3 position, float w, float noise_scale)
+static union vec3 noise_gradient(union vec3 position, float w, float noise_scale, const int octaves)
 {
 	union vec3 g;
 	const float dx = noise_scale * (0.05f / (float) DIM);
 	const float dy = noise_scale * (0.05f / (float) DIM);
 	const float dz = noise_scale * (0.05f / (float) DIM);
-	const int octaves = noise_levels - 1;
 
 	g.v.x = fbmnoise4[octaves](position.v.x + dx, position.v.y, position.v.z, w) -
 		fbmnoise4[octaves](position.v.x - dx, position.v.y, position.v.z, w);
@@ -637,6 +636,7 @@ static void *update_velocity_field_thread_fn(void *info)
 	int f = t->f;
 	float w = t->w;
 	struct velocity_field *vf = t->vf;
+	const int octaves = noise_levels - 1;
 
 	int i, j, vortex;
 	union vec3 v, c, ng;
@@ -649,7 +649,7 @@ static void *update_velocity_field_thread_fn(void *info)
 			v = fij_to_xyz(f, i, j, vfdim);
 			ov = v;
 			vec3_mul_self(&v, noise_scale);
-			ng = noise_gradient(v, w * noise_scale, noise_scale);
+			ng = noise_gradient(v, w * noise_scale, noise_scale, octaves);
 			c = curl2(v, ov, noise_scale, ng);
 			vec3_mul(&vf->v[f][i][j], &c, velocity_factor);
 
@@ -879,6 +879,7 @@ static void *update_output_image_thread_fn(void *info)
 	struct image_thread_info *t = info;
 	struct particle *p = t->p;
 	int i, j;
+	const int octaves = noise_levels - 1;
 
 	if (!nofade)
 		fade_out_background(t->face, &darkest_color);
@@ -886,10 +887,10 @@ static void *update_output_image_thread_fn(void *info)
 		if (p[i].fij.f != t->face)
 			continue;
 		p[i].c.a = opacity;
-		paint_particle(t->face, p[i].fij.i, p[i].fij.j, &p[i].c);
+		paint_particle(t->face, p[i].fij.i, p[i].fij.j, &p[i].c, octaves);
 		if (large_pixels) {
 			for (j = 0; j < 8; j++)
-				paint_particle(t->face, p[i].fij.i + xo[j], p[i].fij.j + yo[j], &p[i].c);
+				paint_particle(t->face, p[i].fij.i + xo[j], p[i].fij.j + yo[j], &p[i].c, octaves);
 		}
 	}
 	return NULL;
