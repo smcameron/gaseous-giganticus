@@ -287,6 +287,7 @@ static void paint_particle(int face, int i, int j, struct color *c, const int oc
 	unsigned char *pixel;
 	int p;
 	struct color oc, nc;
+	float (*const noise)(float x, float y, float z, float w) = fbmnoise4[octaves];
 
 	if (i < 0 || i > DIM - 1 || j < 0 || j > DIM - 1) {
 		/* FIXME: We get a handful of these, don't know why.
@@ -322,7 +323,7 @@ static void paint_particle(int face, int i, int j, struct color *c, const int oc
 		v = fij_to_xyz(face, i, j, DIM);
 		vec3_normalize_self(&v);
 		vec3_mul_self(&v, 3.6 * noise_scale);
-		n = fbmnoise4[octaves](v.v.x, v.v.y, v.v.z, (w_offset + 10.0) * 3.33f);
+		n = noise(v.v.x, v.v.y, v.v.z, (w_offset + 10.0) * 3.33f);
 		if (n > 0.5f)
 			n = n * (1.0 + n - 0.5);
 		if (n < 0.0f)
@@ -587,13 +588,14 @@ static union vec3 noise_gradient(union vec3 position, float w, float noise_scale
 	const float dx = noise_scale * (0.05f / (float) DIM);
 	const float dy = noise_scale * (0.05f / (float) DIM);
 	const float dz = noise_scale * (0.05f / (float) DIM);
+	float (*const noise)(float x, float y, float z, float w) = fbmnoise4[octaves];
 
-	g.v.x = fbmnoise4[octaves](position.v.x + dx, position.v.y, position.v.z, w) -
-		fbmnoise4[octaves](position.v.x - dx, position.v.y, position.v.z, w);
-	g.v.y = fbmnoise4[octaves](position.v.x, position.v.y + dy, position.v.z, w) -
-		fbmnoise4[octaves](position.v.x, position.v.y - dy, position.v.z, w);
-	g.v.z = fbmnoise4[octaves](position.v.x, position.v.y, position.v.z + dz, w) -
-		fbmnoise4[octaves](position.v.x, position.v.y, position.v.z - dz, w);
+	g.v.x = noise(position.v.x + dx, position.v.y, position.v.z, w) -
+		noise(position.v.x - dx, position.v.y, position.v.z, w);
+	g.v.y = noise(position.v.x, position.v.y + dy, position.v.z, w) -
+		noise(position.v.x, position.v.y - dy, position.v.z, w);
+	g.v.z = noise(position.v.x, position.v.y, position.v.z + dz, w) -
+		noise(position.v.x, position.v.y, position.v.z - dz, w);
 	return g;
 }
 
