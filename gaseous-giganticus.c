@@ -1414,7 +1414,7 @@ static void process_options(int argc, char *argv[])
 	return;
 }
 
-static void copy_cubemap_face_to_output_face(unsigned char *image, int face, int width, int height)
+static void copy_cubemap_face_to_output_face(unsigned char *image, int face, int width, int height, int has_alpha)
 {
 	int x, y, ix, iy, ip, op;
 	unsigned char *input_pixel, *output_pixel;
@@ -1425,7 +1425,7 @@ static void copy_cubemap_face_to_output_face(unsigned char *image, int face, int
 			iy = (y * height) / DIM;
 			ip = y * DIM + x;
 			op = iy * width + ix;
-			input_pixel = &image[ip * 4];
+			input_pixel = &image[ip * (3 + !!has_alpha)];
 			output_pixel = &output_image[face][op * 4];
 			output_pixel[0] = input_pixel[0];
 			output_pixel[1] = input_pixel[1];
@@ -1448,7 +1448,7 @@ static void load_cubemap_images(const char *prefix)
 	/* Copy the cubemap images directly to the output images as a starting point. */
 	for (i = 0; i < 6; i++)
 		copy_cubemap_face_to_output_face(cubemap_image[i], i,
-				start_image_width, start_image_height);
+				start_image_width, start_image_height, start_image_has_alpha);
 }
 
 /* Return a value between -1.0 and 1.0 with a bias towards zero.
