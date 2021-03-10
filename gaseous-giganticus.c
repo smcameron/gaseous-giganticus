@@ -1028,6 +1028,7 @@ static void usage(void)
 	fprintf(stderr, "                 Default is 0.5. Min is 0.0, max is 1.0.\n");
 	fprintf(stderr, "   -b, --bands : Number of counter rotating bands.  Default is 6.0\n");
 	fprintf(stderr, "   -d, --dump-velocity-field : dump velocity field data to specified file\n");
+	fprintf(stderr, "                               (see -r option, below)\n");
 	fprintf(stderr, "   -D, --faderate : Rate at which particles fade, default = 0.01\n");
 	fprintf(stderr, "   -c, --count : Number of iterations to run the simulation.\n");
 	fprintf(stderr, "                 Default is 1000\n");
@@ -1075,6 +1076,9 @@ static void usage(void)
 	fprintf(stderr, "                          Also affects --stripe option.\n");
 	fprintf(stderr, "   -B, --band-vel-factor: Multiply band velocity by this number when\n");
 	fprintf(stderr, "                   computing velocity field.  Default is 2.9\n");
+	fprintf(stderr, "   -r, --restore-velocity-field: Instead of computing the velocity field from\n");
+	fprintf(stderr, "                                 scratch, import a previously saved velocity\n");
+	fprintf(stderr, "                                 field (see -d option, above)\n");
 	fprintf(stderr, "   -s, --stripe: Begin with stripes from a vertical strip of input image\n");
 	fprintf(stderr, "   -S, --sinusoidal: Use sinusoidal projection for input image\n");
 	fprintf(stderr, "                 Note: sinusoidal is the default projection.\n");
