@@ -806,6 +806,30 @@ static void sphere_worldspace_to_tangentspace(struct velocity_field *vf, int fac
 	union quat rotation;
 	union vec3 velocity;
 
+	/* Eh, pretty sure the below calculation is incorrect. For starters, The cube-mapping stretches things
+	 * so that say, at the corners of the cubes, the X axis is not horizontal, but sloping, because the
+	 * edges of the over-inflated cube are curved. Additionally, I think the rotation is under-constrained
+	 * and won't end up with the rotated vector necessarily pointing in quite the right direction. I think
+	 * to do it properly, we might need to use the mikktspace stuff (see http://www.mikktspace.com/) for
+	 * tangents and bitangents, and relate the sphere coordinates to mesh vertices to figure out which way
+	 * the u,v axes are pointing at this point in the texture, etc. etc. That means bringing in mesh.c, etc.
+	 * from SNIS, which I'd rather not do.  Which probably means this should be a separate program that
+	 * takes the velocity field dumped by gaseous-giganticus (see dump_velocity_field()) and converts it to
+	 * a flow field.  My brain hurts.
+	 *
+	 * The basic idea of the algorithm below is as follows:
+	 * 1. At each point on the sphere, we know the normal (trivially, it points away from the center of sphere).
+	 * 2. Compute the rotation from this normal to a normal that is pointing straight down positive Z axis.
+	 * 3. Rotate our tangent vector in this same way. Now our vector is completely in the x,y plane. We're done.
+	 *
+	 * Why this is wrong:
+	 * Imagine a point on the far side of a sphere, almost directly opposite the positive z axis (assuming z is
+	 * pointed right at us), but a bit higher than the equator, and a tangent vector pointing up and to the right.
+	 * A rotation to get the normal pointing * at us will take the great circle over the north pole.  In doing so,
+	 * this will make our tangent vector point down and to the right.  But it should be pointing up and to the
+	 * left.
+	 */
+
 	velocity = vf->v[face][i][j];
 	vec3_mul_self(&velocity, scale_factor);	/* Scale the velocity vector into a reasonable range (-1.0 to 1.0) */
 	quat_from_u2v(&rotation, &world_space_normal, &tangent_space_normal, NULL); /* Compute the rotation from world space to tangent space */
@@ -897,6 +921,7 @@ static void dump_flow_field(char *filename_template, struct velocity_field *vf, 
 	 */
 	scale_factor = 1.0 / find_max_velocity_magnitude(vf);
 
+	fprintf(stderr, "Calculating flow field images.  WARNING - This calculation is not correct!\n");
 	/* Construct and save each of the six images */
 	for (i = 0; i < 6; i++) {
 		snprintf(filename, PATH_MAX - 1, "%s-%d.png", filename_template, i);
@@ -906,6 +931,7 @@ static void dump_flow_field(char *filename_template, struct velocity_field *vf, 
 			fprintf(stderr, "Failed to write %s\n", filename);
 		free(image);
 	}
+	fprintf(stderr, "Flow field images done\n");
 }
 
 static int restore_velocity_field(char *filename, struct velocity_field *vf)
