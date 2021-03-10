@@ -53,6 +53,7 @@ static const int image_threads = 6; /* for 6 faces of cubemap, don't change this
 static char *default_output_file_prefix = "gasgiant-";
 static char *default_input_file = "gasgiant-input.png";
 static char *vf_dump_file = NULL;
+static char *flow_field_dump_file = NULL;
 static int restore_vf_data = 0;
 static char *output_file_prefix;
 static char *input_file;
@@ -795,6 +796,118 @@ static void dump_velocity_field(char *filename_template, struct velocity_field *
 	free(filename);
 }
 
+static void sphere_worldspace_to_tangentspace(struct velocity_field *vf, int face, int i, int j, union vec2 *v, double scale_factor)
+{
+	/* Convert the world space vec3 in the velocity field at vf->v[face][i][j] to
+	 * a tangent space vec2 and store this as output in v
+	 */
+	union vec3 world_space_normal = fij_to_xyz(face, i, j, vfdim);
+	union vec3 tangent_space_normal = { { 0.0, 0.0, 1.0 } };
+	union quat rotation;
+	union vec3 velocity;
+
+	velocity = vf->v[face][i][j];
+	vec3_mul_self(&velocity, scale_factor);	/* Scale the velocity vector into a reasonable range (-1.0 to 1.0) */
+	quat_from_u2v(&rotation, &world_space_normal, &tangent_space_normal, NULL); /* Compute the rotation from world space to tangent space */
+	quat_rot_vec_self(&velocity, &rotation); /* Rotate the velocity vector into tangent space */
+
+	/* Because the original velocity was tangent to the surface of the sphere (orthogonal to the world space normal),
+	 * after the rotation, all the magnitude should reside in x,y and z should be 0. So we can put it in our output vec2. */
+	v->v.x = velocity.v.x;
+	v->v.y = velocity.v.y;
+}
+
+static void encode_vec2_in_red_green(unsigned char *image, int i, int j, union vec2 *v)
+{
+	unsigned char *pixel;
+
+	float x = (0.5 * v->v.x + 0.5);
+	float y = (0.5 * v->v.y + 0.5);
+
+	int p = j * vfdim + i;
+	pixel = &image[p * 3];
+	pixel[0] = float2int(255.0f * x) & 0xff;
+	pixel[1] = float2int(255.0f * y) & 0xff;
+	pixel[2] = 0;
+}
+
+static void velocityfield_to_flowfield_image(struct velocity_field *vf, int face, unsigned char *image, double scale_factor)
+{
+	int i, j;
+	union vec2 v;
+
+	/* The velocity field is 6 fields of 3D vectors tangent to the surface of a sphere,
+	 * 1 field for each face of a cube that is over-inflated to be a sphere. The flow
+	 * fields need to be 2D vectors in tangent-space, which we than encode in the red
+	 * and green channels of an image.
+	 *
+	 * vf: the velocity field
+	 * face: which of the 6 faces of the cubemap we're dealing with.
+	 * image: buffer of size (3 * vfdim *vfdim) bytes, initialized to zero
+	 * 		into which we will store the image data.
+	 */
+	for (i = 0; i < vfdim; i++) {
+		for (j = 0; j < vfdim; j++) {
+			sphere_worldspace_to_tangentspace(vf, face, i, j, &v, scale_factor);
+			encode_vec2_in_red_green(image, i, j, &v);
+		}
+	}
+
+	return;
+}
+
+static double find_max_velocity_magnitude(struct velocity_field *vf)
+{
+	int f, i, j;
+	double answer = -1.0;
+
+	for (f = 0; f < 6; f++) {
+		for (i = 0; i < vfdim; i++) {
+			for (j = 0; j < vfdim; j++) {
+				double candidate = vec3_magnitude2(&vf->v[f][i][j]);
+				if (candidate > answer)
+					answer = candidate;
+			}
+		}
+	}
+	return sqrt(answer);
+}
+
+static void dump_flow_field(char *filename_template, struct velocity_field *vf, int use_wstep)
+{
+	int i;
+	unsigned char *image;
+	char filename[PATH_MAX];
+	double scale_factor;
+
+	/* TODO: Allow use_wstep to enable outputting the evolving velocity field. Not implementing this
+	 * now as I've not found wstep to be very useful (takes too long, not sure it does anything good.)
+	 */
+	if (use_wstep)
+		return;
+	if (!filename_template)
+		return;
+	if (strlen(filename_template) > PATH_MAX - 10) {
+		fprintf(stderr, "Sorry, filename '%s' is too long\n", filename_template);
+		return;
+	}
+
+	/* The magnitudes of the velocity field are in, let's say, unknown units.
+	 * We need to scale them so that the largest has a magnitude of 1.0
+	 */
+	scale_factor = 1.0 / find_max_velocity_magnitude(vf);
+
+	/* Construct and save each of the six images */
+	for (i = 0; i < 6; i++) {
+		snprintf(filename, PATH_MAX - 1, "%s-%d.png", filename_template, i);
+		image = calloc(1, 3 * vfdim * vfdim);
+		velocityfield_to_flowfield_image(vf, i, image, scale_factor);
+		if (png_utils_write_png_image(filename, image, vfdim, vfdim, 0, 0))
+			fprintf(stderr, "Failed to write %s\n", filename);
+		free(image);
+	}
+}
+
 static int restore_velocity_field(char *filename, struct velocity_field *vf)
 {
 	int fd;
@@ -1029,6 +1142,8 @@ static void usage(void)
 	fprintf(stderr, "   -b, --bands : Number of counter rotating bands.  Default is 6.0\n");
 	fprintf(stderr, "   -d, --dump-velocity-field : dump velocity field data to specified file\n");
 	fprintf(stderr, "                               (see -r option, below)\n");
+	fprintf(stderr, "   --dump-flow-field : dump velocity field data to a series of \n");
+	fprintf(stderr, "                       six RGB png files encoding x, y in R, G channels\n");
 	fprintf(stderr, "   -D, --faderate : Rate at which particles fade, default = 0.01\n");
 	fprintf(stderr, "   -c, --count : Number of iterations to run the simulation.\n");
 	fprintf(stderr, "                 Default is 1000\n");
@@ -1106,6 +1221,7 @@ static void usage(void)
 #define VORTEX_SIZE_OPTION 1000
 #define VORTEX_SIZE_VARIANCE_OPTION 1001
 #define VORTEX_BAND_THRESHOLD_OPTION 1002
+#define DUMP_FLOW_FIELD_OPTION 1003
 
 static struct option long_options[] = {
 	{ "pole-attenuation", required_argument, NULL, 'a' },
@@ -1149,6 +1265,7 @@ static struct option long_options[] = {
 	{ "vortex-size-variance", required_argument, NULL, VORTEX_SIZE_VARIANCE_OPTION },
 	{ "noise-scale", required_argument, NULL, 'z' },
 	{ "band-speed-power", required_argument, NULL, 'e' },
+	{ "dump-flow-field", required_argument, NULL, DUMP_FLOW_FIELD_OPTION },
 	{ 0, 0, 0, 0 },
 };
 
@@ -1399,6 +1516,9 @@ static void process_options(int argc, char *argv[])
 				vortex_band_threshold = 0.05;
 			if (vortex_band_threshold > 1.0)
 				vortex_band_threshold = 1.0;
+			break;
+		case DUMP_FLOW_FIELD_OPTION:
+			flow_field_dump_file = optarg;
 			break;
 		default:
 			fprintf(stderr, "unknown option '%s'\n",
@@ -1661,6 +1781,7 @@ int main(int argc, char *argv[])
 	if (restore_velocity_field(vf_dump_file, vf))
 		update_velocity_field(vf, noise_scale, w_offset, &use_wstep);
 	dump_velocity_field(vf_dump_file, vf, use_wstep);
+	dump_flow_field(flow_field_dump_file, vf, 0); /* wstep 0 first time to dump even if it's set */
 
 	for (i = 0; i < niterations; i++) {
 		if ((i % 50) == 0)
@@ -1690,6 +1811,7 @@ int main(int argc, char *argv[])
 			w_offset += wstep;
 			update_velocity_field(vf, noise_scale, w_offset, &use_wstep);
 			dump_velocity_field(vf_dump_file, vf, use_wstep);
+			dump_flow_field(flow_field_dump_file, vf, use_wstep);
 		}
 	}
 	if (last_imaged_iteration != i - 1) {
