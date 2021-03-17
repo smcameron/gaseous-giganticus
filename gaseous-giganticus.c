@@ -401,7 +401,7 @@ static union vec3 fij_to_xyz(int f, int i, int j, const int dim)
 }
 
 /* convert from cartesian coords on surface of a sphere to floating point cubemap coords (face encoded in z) */
-static union vec3 xyz_to_fij_float(const union vec3 *p, const int dim)
+static union vec3 xyz_to_fij_float(const union vec3 *p, const int dim, int preferred_face)
 {
 	union vec3 answer;
 	union vec3 t;
@@ -458,6 +458,42 @@ static union vec3 xyz_to_fij_float(const union vec3 *p, const int dim)
 				i = (t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
 			}
 			j = (-t.v.y / d) * fdim * 0.5 + 0.5 * fdim;
+		}
+	}
+
+	if (preferred_face != -1 && f != preferred_face) {
+		f = preferred_face;
+		switch (preferred_face) {
+		case 0:
+			d = fabs(t.v.z);
+			i = (t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+			j = (-t.v.y / d) * fdim * 0.5 + 0.5 * fdim;
+			break;
+		case 1:
+			d = fabs(t.v.x);
+			i = (-t.v.z / d)  * fdim * 0.5 + 0.5 * fdim;
+			j = (-t.v.y / d) * fdim * 0.5 + 0.5 * fdim;
+			break;
+		case 2:
+			d = fabs(t.v.z);
+			i = (-t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+			j = (-t.v.y / d) * fdim * 0.5 + 0.5 * fdim;
+			break;
+		case 3:
+			d = fabs(t.v.x);
+			i = (t.v.z / d)  * fdim * 0.5 + 0.5 * fdim;
+			j = (-t.v.y / d) * fdim * 0.5 + 0.5 * fdim;
+			break;
+		case 4:
+			d = fabs(t.v.y);
+			i = (t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+			j = (t.v.z / d) * fdim * 0.5 + 0.5 * fdim;
+			break;
+		case 5:
+			d = fabs(t.v.y);
+			i = (t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+			j = (-t.v.z / d) * fdim * 0.5 + 0.5 * fdim;
+			break;
 		}
 	}
 
@@ -1651,8 +1687,8 @@ static double compute_flowmap_scaling_factor(int nparticles)
 	 * are between 0 and 1.
 	 */
 	for (i = 0; i < nparticles; i++) {
-		fij1 = xyz_to_fij_float(&prev_particle_pos[i], DIM);
-		fij2 = xyz_to_fij_float(&particle[i].pos, DIM);
+		fij1 = xyz_to_fij_float(&prev_particle_pos[i], DIM, -1);
+		fij2 = xyz_to_fij_float(&particle[i].pos, DIM, (int) fij1.v.z);
 		if (fij1.v.z != fij2.v.z) /* Do not count particles that cross cubemap face boundaries */
 			continue;
 		p1.v.x = fij1.v.x;
@@ -1707,8 +1743,8 @@ static void maybe_compute_flowmap(int nparticles, int dim)
 		scaling_factor = compute_flowmap_scaling_factor(nparticles);
 
 	for (p = 0; p < nparticles; p++) {
-		p1 = xyz_to_fij_float(&prev_particle_pos[p], DIM);
-		p2 = xyz_to_fij_float(&particle[p].pos, DIM);
+		p1 = xyz_to_fij_float(&prev_particle_pos[p], DIM, -1);
+		p2 = xyz_to_fij_float(&particle[p].pos, DIM, (int) p1.v.z);
 		if (p1.v.z != p2.v.z) /* If the particle crossed cubemap face boundary, skip it */
 			continue;
 		pv.v.x = p2.v.x - p1.v.x;
@@ -1716,9 +1752,9 @@ static void maybe_compute_flowmap(int nparticles, int dim)
 		pv.v.x *= scaling_factor;
 		pv.v.y *= scaling_factor;
 
-		i = float2int(p2.v.x);
-		j = float2int(p2.v.y);
-		f = float2int(p2.v.z);
+		i = float2int(p1.v.x);
+		j = float2int(p1.v.y);
+		f = float2int(p1.v.z);
 
 		encode_vec2_in_red_green(flowmap_image[f], i, j, &pv);
 	}
