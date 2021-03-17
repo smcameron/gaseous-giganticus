@@ -95,8 +95,14 @@ Number of iterations to run the simulation.  Default is 1000
 -C, --cloudmode
 modulate output images to produce clouds
 .TP
--d, --dump-velocity-field
+-d, --dump-velocity-field output-file
 Dump out velocity field data to the specified file after initial calculation.
+.TP
+--dump-flowmap output-file
+Dump out velocity field data to a series of six RGB png files with x and y velocities
+encoded in the R and G channels. If the output-file is specified as, e.g. 'ABC', then
+the output files will be ABC-1.png, ABC-2.png, ABC-3.png, ABC-4.png, ABC-5.png and
+ABC-6.png
 .TP
 -D, --fade-rate
 Particle fade rate.  Default is 0.01

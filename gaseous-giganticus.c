@@ -53,6 +53,9 @@ static const int image_threads = 6; /* for 6 faces of cubemap, don't change this
 static char *default_output_file_prefix = "gasgiant-";
 static char *default_input_file = "gasgiant-input.png";
 static char *vf_dump_file = NULL;
+static char *flowmap_dump_file = NULL;
+static int flowmap_impressions = 40;
+static int flowmap_has_alpha = 0;
 static int restore_vf_data = 0;
 static char *output_file_prefix;
 static char *input_file;
@@ -109,6 +112,7 @@ static char *start_image;
 static unsigned char *cubemap_image[6] = { 0 };
 static int start_image_width, start_image_height, start_image_has_alpha, start_image_bytes_per_row;
 static unsigned char *output_image[6];
+static unsigned char *flowmap_image[6];
 static int image_save_period = 20;
 static float w_offset = 0.0;
 static int random_mode;
@@ -140,6 +144,8 @@ static struct particle {
 	struct color c;
 	struct fij fij;
 } *particle;
+
+static union vec3 *prev_particle_pos; /* previous particle positions used in (optionally) calculating flow map */
 
 struct movement_thread_info {
 	int first_particle, last_particle;
@@ -394,6 +400,74 @@ static union vec3 fij_to_xyz(int f, int i, int j, const int dim)
 	return answer;
 }
 
+/* convert from cartesian coords on surface of a sphere to floating point cubemap coords (face encoded in z) */
+static union vec3 xyz_to_fij_float(const union vec3 *p, const int dim)
+{
+	union vec3 answer;
+	union vec3 t;
+	float f, i, j;
+	float d;
+	const float fdim = (float) dim;
+
+	vec3_normalize(&t, p);
+
+	if (fabs(t.v.x) > fabs(t.v.y)) {
+		if (fabs(t.v.x) > fabs(t.v.z)) {
+			/* x is longest leg */
+			d = fabs(t.v.x);
+			if (t.v.x < 0) {
+				f = 3;
+				i = (t.v.z / d) * fdim * 0.5 + 0.5 * (float) fdim;
+			} else {
+				f = 1;
+				i = (-t.v.z / d)  * fdim * 0.5 + 0.5 * fdim;
+			}
+		} else {
+			/* z is longest leg */
+			d = fabs(t.v.z);
+			if (t.v.z < 0) {
+				f = 2;
+				i = (-t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+			} else {
+				f = 0;
+				i = (t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+			}
+		}
+		j = (-t.v.y / d) * fdim * 0.5 + 0.5 * fdim;
+	} else {
+		/* x is not longest leg, y or z must be. */
+		if (fabs(t.v.y) > fabs(t.v.z)) {
+			/* y is longest leg */
+			d = fabs(t.v.y);
+			if (t.v.y < 0) {
+				f = 5;
+				j = (-t.v.z / d) * fdim * 0.5 + 0.5 * fdim;
+			} else {
+				f = 4;
+				j = (t.v.z / d) * fdim * 0.5 + 0.5 * fdim;
+			}
+			i = (t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+		} else {
+			/* z is longest leg */
+			d = fabs(t.v.z);
+			if (t.v.z < 0) {
+				f = 2;
+				i = (-t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+			} else {
+				f = 0;
+				i = (t.v.x / d) * fdim * 0.5 + 0.5 * fdim;
+			}
+			j = (-t.v.y / d) * fdim * 0.5 + 0.5 * fdim;
+		}
+	}
+
+	answer.v.x = i;
+	answer.v.y = j;
+	answer.v.z = f;
+
+	return answer;
+}
+
 /* convert from cartesian coords on surface of a sphere to cubemap coords */
 static struct fij xyz_to_fij(const union vec3 *p, const int dim)
 {
@@ -486,7 +560,7 @@ static const float face_to_ydim_multiplier[] = { 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0
 						0.0, 2.0 / 3.0 };
 
 /* place particles randomly on the surface of a sphere */
-static void init_particles(struct particle **pp, const int nparticles)
+static void init_particles(struct particle **pp, union vec3 **prev_particle_pos, const int nparticles)
 {
 	float x, y, z, xo, yo;
 	const int bytes_per_pixel = start_image_has_alpha ? 4 : 3;
@@ -498,6 +572,9 @@ static void init_particles(struct particle **pp, const int nparticles)
 	printf("Initializing %d particles", nparticles); fflush(stdout);
 	*pp = malloc(sizeof(**pp) * nparticles);
 	p = *pp;
+
+	if (flowmap_dump_file)
+		*prev_particle_pos = calloc(nparticles, sizeof(**prev_particle_pos));
 
 	for (int i = 0; i < nparticles; i++) {
 		random_point_on_sphere((float) XDIM / 2.0f, &x, &y, &z);
@@ -833,10 +910,12 @@ static int restore_velocity_field(char *filename, struct velocity_field *vf)
 }
 
 /* move a particle according to velocity field at its current location */
-static void move_particle(struct particle *p, struct velocity_field *vf)
+static void move_particle(struct particle *p, struct velocity_field *vf, union vec3 *prev_particle_pos)
 {
 	struct fij fij;
 
+	if (prev_particle_pos)
+		*prev_particle_pos = p->pos;
 	fij = xyz_to_fij(&p->pos, vfdim);
 	p->fij = xyz_to_fij(&p->pos, DIM);
 	vec3_add_self(&p->pos, &vf->v[fij.f][fij.i][fij.j]);
@@ -849,7 +928,7 @@ static void *move_particles_thread_fn(void *info)
 	struct movement_thread_info *thr = info;
 
 	for (int i = thr->first_particle; i <= thr->last_particle; i++)
-		move_particle(&thr->p[i], thr->vf);
+		move_particle(&thr->p[i], thr->vf, prev_particle_pos ? &prev_particle_pos[i] : NULL);
 	return NULL;
 }
 
@@ -924,7 +1003,7 @@ static void update_output_images(int image_threads, struct particle p[], const i
 		opacity = 0.95 * opacity;
 }
 
-static void save_output_images(int sequence_number)
+static void save_output_images(char *output_file_prefix, int sequence_number, unsigned char *image[6], int has_alpha)
 {
 	int i;
 	char fname[PATH_MAX];
@@ -934,7 +1013,7 @@ static void save_output_images(int sequence_number)
 			sprintf(fname, "%s%d.png", output_file_prefix, i);
 		else
 			sprintf(fname, "%s%04d-%d.png", output_file_prefix, i, sequence_number);
-		if (png_utils_write_png_image(fname, output_image[i], DIM, DIM, 1, 0))
+		if (png_utils_write_png_image(fname, image[i], DIM, DIM, has_alpha, 0))
 			fprintf(stderr, "Failed to write %s\n", fname);
 	}
 	printf("o");
@@ -993,21 +1072,21 @@ static char *load_image(const char *filename, int *w, int *h, int *a, int *bytes
 	return i;
 }
 
-void allocate_output_images(void)
+void allocate_output_images(unsigned char *image[6], int bytes_per_pixel)
 {
 	int i;
 
 	for (i = 0; i < 6; i++)
-		output_image[i] = calloc(1, 4 * DIM * DIM);
+		image[i] = calloc(1, bytes_per_pixel * DIM * DIM);
 }
 
-static void free_output_images(void)
+static void free_output_images(unsigned char *image[6])
 {
 	int i;
 
 	for (i = 0; i < 6; i++)
-		if (output_image[i])
-			free(output_image[i]);
+		if (image[i])
+			free(image[i]);
 }
 
 static void wait_for_movement_threads(struct movement_thread_info ti[], int nthreads)
@@ -1036,6 +1115,8 @@ static void usage(void)
 	fprintf(stderr, "   -b, --bands : Number of counter rotating bands.  Default is 6.0\n");
 	fprintf(stderr, "   -d, --dump-velocity-field : dump velocity field data to specified file\n");
 	fprintf(stderr, "                               (see -r option, below)\n");
+	fprintf(stderr, "   --dump-flowmap : dump velocity field data to a series of\n");
+	fprintf(stderr, "                    six RGB png files encoding x, y in R, G channels\n");
 	fprintf(stderr, "   -D, --faderate : Rate at which particles fade, default = 0.01\n");
 	fprintf(stderr, "   -c, --count : Number of iterations to run the simulation.\n");
 	fprintf(stderr, "                 Default is 1000\n");
@@ -1113,6 +1194,7 @@ static void usage(void)
 #define VORTEX_SIZE_OPTION 1000
 #define VORTEX_SIZE_VARIANCE_OPTION 1001
 #define VORTEX_BAND_THRESHOLD_OPTION 1002
+#define DUMP_FLOWMAP_OPTION 1003
 
 static struct option long_options[] = {
 	{ "pole-attenuation", required_argument, NULL, 'a' },
@@ -1156,6 +1238,7 @@ static struct option long_options[] = {
 	{ "vortex-size-variance", required_argument, NULL, VORTEX_SIZE_VARIANCE_OPTION },
 	{ "noise-scale", required_argument, NULL, 'z' },
 	{ "band-speed-power", required_argument, NULL, 'e' },
+	{ "dump-flowmap", required_argument, NULL, DUMP_FLOWMAP_OPTION },
 	{ 0, 0, 0, 0 },
 };
 
@@ -1407,6 +1490,9 @@ static void process_options(int argc, char *argv[])
 			if (vortex_band_threshold > 1.0)
 				vortex_band_threshold = 1.0;
 			break;
+		case DUMP_FLOWMAP_OPTION:
+			flowmap_dump_file = optarg;
+			break;
 		default:
 			fprintf(stderr, "unknown option '%s'\n",
 				option_index > 0 && option_index - 1 < argc &&
@@ -1551,6 +1637,93 @@ static int get_num_cpus()
 #endif
 #endif
 
+static double compute_flowmap_scaling_factor(int nparticles)
+{
+	int i;
+	float maxv = 0.0;
+	union vec2 p1, p2, pv;
+	union vec3 fij1, fij2;
+	float vm2;
+
+	/* Project particle movement onto cubemap faces to get 2d velocity vectors
+	 * and find the largest such velocity. Return 1.0 / sqrt(largest velocity)
+	 * In this way, we can scale all the velocities such that the magnitudes
+	 * are between 0 and 1.
+	 */
+	for (i = 0; i < nparticles; i++) {
+		fij1 = xyz_to_fij_float(&prev_particle_pos[i], DIM);
+		fij2 = xyz_to_fij_float(&particle[i].pos, DIM);
+		if (fij1.v.z != fij2.v.z) /* Do not count particles that cross cubemap face boundaries */
+			continue;
+		p1.v.x = fij1.v.x;
+		p1.v.y = fij1.v.y;
+		p2.v.x = fij2.v.x;
+		p2.v.y = fij2.v.y;
+		pv.v.x = p2.v.x - p1.v.x;
+		pv.v.y = p2.v.y - p1.v.y;
+		vm2 = pv.v.x * pv.v.x + pv.v.y * pv.v.y;
+#if 0
+		/* Ignore very high velocities */
+		if (vm2 > 25.0)
+			continue;
+#endif
+		if (vm2 > maxv)
+			maxv = vm2;
+	}
+	return 1.0 / sqrt(maxv);
+}
+
+static void encode_vec2_in_red_green(unsigned char *image, int i, int j, union vec2 *v)
+{
+	unsigned char *pixel;
+
+	float x = (0.5 * v->v.x + 0.5);
+	float y = (0.5 * v->v.y + 0.5);
+
+	int p = j * DIM + i;
+	pixel = &image[p * (3 + flowmap_has_alpha)];
+	pixel[0] = float2int(255.0f * x) & 0xff;
+	pixel[1] = float2int(255.0f * y) & 0xff;
+	pixel[2] = 0;
+	if (flowmap_has_alpha)
+		pixel[3] = 255;
+}
+
+/* Compute a flow map in which particle velocity is represented as 6 images of
+ * a cubemap with x and y velocities encoded in R and G channels
+ */
+static void maybe_compute_flowmap(int nparticles, int dim)
+{
+	static float scaling_factor = 1.1e6;
+	union vec2 pv;
+	union vec3 p1, p2;
+	int p, f, i, j;
+
+	if (!flowmap_dump_file)
+		return;
+
+	if (scaling_factor > 1e6)
+		/* Only need to calculate this once as it is nearly the same every time. */
+		scaling_factor = compute_flowmap_scaling_factor(nparticles);
+
+	for (p = 0; p < nparticles; p++) {
+		p1 = xyz_to_fij_float(&prev_particle_pos[p], DIM);
+		p2 = xyz_to_fij_float(&particle[p].pos, DIM);
+		if (p1.v.z != p2.v.z) /* If the particle crossed cubemap face boundary, skip it */
+			continue;
+		pv.v.x = p2.v.x - p1.v.x;
+		pv.v.y = p2.v.y - p1.v.y;
+		pv.v.x *= scaling_factor;
+		pv.v.y *= scaling_factor;
+
+		i = float2int(p2.v.x);
+		j = float2int(p2.v.y);
+		f = float2int(p2.v.z);
+
+		encode_vec2_in_red_green(flowmap_image[f], i, j, &pv);
+	}
+}
+
 static void advect_velocity_field(void)
 {
 	/* TODO: simulate fluid momentum via lagrangian advection of velocity field.
@@ -1648,7 +1821,9 @@ int main(int argc, char *argv[])
 	ti[t].last_particle = particle_count - 1;
 
 	printf("Allocating output image space\n");
-	allocate_output_images();
+	allocate_output_images(output_image, 4);
+	if (flowmap_dump_file)
+		allocate_output_images(flowmap_image, 3 + flowmap_has_alpha);
 	start_image_has_alpha = 0;
 	if (cubemap_prefix) {
 		printf("Loading cubemap images\n");
@@ -1664,7 +1839,7 @@ int main(int argc, char *argv[])
 #endif
 	printf("width, height, bytes per row = %d,%d,%d\n",
 			start_image_width, start_image_height, start_image_bytes_per_row);
-	init_particles(&particle, particle_count);
+	init_particles(&particle, &prev_particle_pos, particle_count);
 	if (restore_velocity_field(vf_dump_file, vf))
 		update_velocity_field(vf, noise_scale, w_offset, &use_wstep);
 	dump_velocity_field(vf_dump_file, vf, use_wstep);
@@ -1690,7 +1865,7 @@ int main(int argc, char *argv[])
 		image_elapsed.tv_sec += imageend.tv_sec - imagebegin.tv_sec;
 		if ((i % image_save_period) == 0) {
 			sequence_number += save_texture_sequence;
-			save_output_images(sequence_number);
+			save_output_images(output_file_prefix, sequence_number, output_image, 1);
 			last_imaged_iteration = i;
 		}
 		if (use_wstep && (i % wstep_period == 0)) {
@@ -1698,10 +1873,14 @@ int main(int argc, char *argv[])
 			update_velocity_field(vf, noise_scale, w_offset, &use_wstep);
 			dump_velocity_field(vf_dump_file, vf, use_wstep);
 		}
+		if (i < flowmap_impressions)
+			maybe_compute_flowmap(particle_count, DIM);
+		if (i == flowmap_impressions)
+			save_output_images(flowmap_dump_file, -1, flowmap_image, flowmap_has_alpha);
 	}
 	if (last_imaged_iteration != i - 1) {
 		sequence_number += save_texture_sequence;
-		save_output_images(sequence_number);
+		save_output_images(output_file_prefix, sequence_number, output_image, 1);
 	}
 	printf("\n%5d / %5d -- done.\n", i, niterations);
 	open_simplex_noise_free(ctx);
@@ -1712,7 +1891,10 @@ int main(int argc, char *argv[])
 		free(old_vf);
 	free(particle);
 	free(ti);
-	free_output_images();
+	free_output_images(output_image);
+	free_output_images(flowmap_image);
+	if (prev_particle_pos)
+		free(prev_particle_pos);
 
 	return 0;
 }
