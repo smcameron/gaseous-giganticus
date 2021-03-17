@@ -997,10 +997,17 @@ void allocate_output_images(void)
 {
 	int i;
 
-	for (i = 0; i < 6; i++) {
-		output_image[i] = malloc(4 * DIM * DIM);
-		memset(output_image[i], 0, 4 * DIM * DIM);
-	}
+	for (i = 0; i < 6; i++)
+		output_image[i] = calloc(1, 4 * DIM * DIM);
+}
+
+static void free_output_images(void)
+{
+	int i;
+
+	for (i = 0; i < 6; i++)
+		if (output_image[i])
+			free(output_image[i]);
 }
 
 static void wait_for_movement_threads(struct movement_thread_info ti[], int nthreads)
@@ -1703,6 +1710,9 @@ int main(int argc, char *argv[])
 	free(vf);
 	if (old_vf)
 		free(old_vf);
+	free(particle);
+	free(ti);
+	free_output_images();
 
 	return 0;
 }
