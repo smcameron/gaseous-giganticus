@@ -88,7 +88,7 @@ static int save_texture_sequence = 0;
 static int magic_fluid_flow = 0; /* 0 = skip fluid dynamics, 1 = do fluid dynamics (not yet implemented) */
 
 #define DIM 1024 /* dimensions of cube map face images */
-#define VFDIM 2048 /* dimension of velocity field. (2 * DIM) is reasonable */
+#define VFDIM 1024 /* dimension of velocity field. (2 * DIM) is reasonable */
 static int vfdim = VFDIM;
 #define FDIM ((float) (DIM))
 #define XDIM DIM
@@ -1911,7 +1911,7 @@ int main(int argc, char *argv[])
 		}
 		if (i < flowmap_impressions)
 			maybe_compute_flowmap(particle_count, DIM);
-		if (i == flowmap_impressions)
+		if (i == flowmap_impressions && flowmap_dump_file)
 			save_output_images(flowmap_dump_file, -1, flowmap_image, flowmap_has_alpha);
 	}
 	if (last_imaged_iteration != i - 1) {
