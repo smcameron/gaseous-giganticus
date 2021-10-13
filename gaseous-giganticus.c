@@ -1659,10 +1659,15 @@ static int get_num_cpus()
 	return sysinfo.dwNumberOfProcessors;
 }
 #else
-#ifdef __linux
+#ifdef unix
 static int get_num_cpus()
 {
+#ifdef _SC_NPROCESSORS_ONLN
 	return sysconf(_SC_NPROCESSORS_ONLN);
+#else
+	return 1;
+#warning "This variant of unix does not define _SC_NPROCESSORS_ONLN. Assuming 1 CPU. Performance will not be good."
+#endif
 }
 #else
 #warning "get_num_cpus() not found. Assuming 1 CPU. Performance will not be good."
