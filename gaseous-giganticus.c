@@ -113,7 +113,7 @@ static unsigned char *cubemap_image[6] = { 0 };
 static int start_image_width, start_image_height, start_image_has_alpha, start_image_bytes_per_row;
 static unsigned char *output_image[6];
 static unsigned char *flowmap_image[6];
-static int image_save_period = 20;
+static int image_save_period = 25;
 static float w_offset = 0.0;
 static int random_mode;
 static int large_pixels = 0;
@@ -1183,7 +1183,7 @@ static void usage(void)
 	fprintf(stderr, "   -F, --vfdim: Set size of velocity field.  Default:2048. Min: 16. Max: 2048\n");
 	fprintf(stderr, "   -i, --input : Input image filename.  Must be RGB or RGBA png file.\n");
 	fprintf(stderr, "   -I, --image-save-period: Interval of simulation iterations after which\n");
-	fprintf(stderr, "         to output images.  Default is every 20 iterations\n");
+	fprintf(stderr, "         to output images.  Default is every 25 iterations\n");
 	fprintf(stderr, "   -m, --speed-multiplier:  band_speed_factor and velocity_factor are\n");
 	fprintf(stderr, "         by this number.  It is a single option to affect both by a\n");
 	fprintf(stderr, "         multiplier which is a bit easier than setting an absolute value\n");
@@ -1830,13 +1830,16 @@ int main(int argc, char *argv[])
 	int last_imaged_iteration = -1;
 	int sequence_number = -1;
 	particle_count = NPARTICLES;
-	struct timeval movebegin, moveend;
-	struct timeval imagebegin, imageend;
+	struct timeval movebegin, moveend, pngbegin, prog_begin;
+	struct timeval imagebegin, imageend, pngend, prog_end;
 
-	double move_elapsed, image_elapsed;
+	double move_elapsed, image_elapsed, png_elapsed, prog_elapsed;
 
 	move_elapsed = 0.0;
 	image_elapsed = 0.0;
+	png_elapsed = 0;
+	prog_elapsed = 0;
+	gettimeofday(&prog_begin, NULL);
 
 	/* Allocate a ton of memory. We allocate these rather than
 	 * declaring them statically because if DIM is too large, the
@@ -1903,11 +1906,18 @@ int main(int argc, char *argv[])
 	dump_velocity_field(vf_dump_file, vf, use_wstep);
 
 	for (i = 0; i < niterations; i++) {
-		if ((i % 50) == 0)
-			printf(" Particle movement:%g ms  Image rendering:%g ms\ni%5d / %5d ",
-				move_elapsed, image_elapsed, i, niterations);
-		else
+		if ((i % 50) == 0) {
+			gettimeofday(&prog_end, NULL);
+			prog_elapsed = timeval_difference(prog_begin, prog_end);
+			if (i != 0)
+				printf(" Part mvmt:%g ms  Render:%g ms  PNG:%g ms Elapsed:%g ms\n",
+					move_elapsed, image_elapsed, png_elapsed, prog_elapsed);
+			else
+				printf("\n");
+			printf("%5d / %5d ", i, niterations);
+		} else {
 			printf(".");
+		}
 		fflush(stdout);
 
 		gettimeofday(&movebegin, NULL);
@@ -1923,7 +1933,10 @@ int main(int argc, char *argv[])
 		image_elapsed += timeval_difference(imagebegin, imageend);
 		if ((i % image_save_period) == 0) {
 			sequence_number += save_texture_sequence;
+			gettimeofday(&pngbegin, NULL);
 			save_output_images(output_file_prefix, sequence_number, output_image, 1);
+			gettimeofday(&pngend, NULL);
+			png_elapsed += timeval_difference(pngbegin, pngend);
 			last_imaged_iteration = i;
 		}
 		if (use_wstep && (i % wstep_period == 0)) {
@@ -1953,6 +1966,10 @@ int main(int argc, char *argv[])
 	free_output_images(flowmap_image);
 	if (prev_particle_pos)
 		free(prev_particle_pos);
+
+	gettimeofday(&prog_end, NULL);
+	prog_elapsed = timeval_difference(prog_begin, prog_end);
+	printf("\nElapsed time: %g ms\n", prog_elapsed);
 
 	return 0;
 }
