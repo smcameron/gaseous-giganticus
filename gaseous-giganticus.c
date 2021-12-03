@@ -1830,13 +1830,13 @@ int main(int argc, char *argv[])
 	int last_imaged_iteration = -1;
 	int sequence_number = -1;
 	particle_count = NPARTICLES;
-	struct timeval movebegin, moveend, move_elapsed;
-	struct timeval imagebegin, imageend, image_elapsed;
+	struct timeval movebegin, moveend;
+	struct timeval imagebegin, imageend;
 
-	move_elapsed.tv_sec = 0;
-	move_elapsed.tv_usec = 0;
-	image_elapsed.tv_sec = 0;
-	image_elapsed.tv_usec = 0;
+	double move_elapsed, image_elapsed;
+
+	move_elapsed = 0.0;
+	image_elapsed = 0.0;
 
 	/* Allocate a ton of memory. We allocate these rather than
 	 * declaring them statically because if DIM is too large, the
@@ -1904,8 +1904,8 @@ int main(int argc, char *argv[])
 
 	for (i = 0; i < niterations; i++) {
 		if ((i % 50) == 0)
-			printf(" m:%lus i:%lus\n%5d / %5d ",
-				move_elapsed.tv_sec, image_elapsed.tv_sec, i, niterations);
+			printf(" Particle movement:%g ms  Image rendering:%g ms\ni%5d / %5d ",
+				move_elapsed, image_elapsed, i, niterations);
 		else
 			printf(".");
 		fflush(stdout);
@@ -1916,11 +1916,11 @@ int main(int argc, char *argv[])
 		wait_for_movement_threads(ti, nthreads);
 		do_fluid_dynamics();
 		gettimeofday(&moveend, NULL);
-		move_elapsed.tv_sec += moveend.tv_sec - movebegin.tv_sec;
+		move_elapsed += timeval_difference(movebegin, moveend);
 		imagebegin = moveend;
 		update_output_images(image_threads, particle, particle_count);
 		gettimeofday(&imageend, NULL);
-		image_elapsed.tv_sec += imageend.tv_sec - imagebegin.tv_sec;
+		image_elapsed += timeval_difference(imagebegin, imageend);
 		if ((i % image_save_period) == 0) {
 			sequence_number += save_texture_sequence;
 			save_output_images(output_file_prefix, sequence_number, output_image, 1);
