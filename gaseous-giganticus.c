@@ -171,6 +171,21 @@ static float vortex_size = 0.04;
 static float vortex_size_variance =  0.02;
 static float vortex_band_threshold = 0.2;
 
+static void backspace(int columns)
+{
+	int i;
+
+	for (i = 0; i < columns; i++)
+		printf("\033[D");
+	fflush(stdout);
+	for (i = 0; i < columns; i++)
+		printf(" ");
+	fflush(stdout);
+	for (i = 0; i < columns; i++)
+		printf("\033[D");
+	fflush(stdout);
+}
+
 static double timeval_difference(struct timeval t1, struct timeval t2)
 {
 	double elapsed_time;
@@ -1060,7 +1075,9 @@ static void save_output_images(char *output_file_prefix, int sequence_number, un
 {
 	int i;
 	char fname[PATH_MAX];
+	char *msg = "Saving Images";
 
+	printf("%s", msg); fflush(stdout);
 	for (i = 0; i < 6; i++) {
 		if (sequence_number < 0)
 			sprintf(fname, "%s%d.png", output_file_prefix, i);
@@ -1069,6 +1086,7 @@ static void save_output_images(char *output_file_prefix, int sequence_number, un
 		if (png_utils_write_png_image(fname, image[i], DIM, DIM, has_alpha, 0))
 			fprintf(stderr, "Failed to write %s\n", fname);
 	}
+	backspace(strlen(msg));
 	printf("o");
 	fflush(stdout);
 }
