@@ -171,6 +171,15 @@ static float vortex_size = 0.04;
 static float vortex_size_variance =  0.02;
 static float vortex_band_threshold = 0.2;
 
+static double timeval_difference(struct timeval t1, struct timeval t2)
+{
+	double elapsed_time;
+	/* compute and return the elapsed time in millisec */
+	elapsed_time = (t2.tv_sec - t1.tv_sec) * 1000.0;      /* sec to ms */
+	elapsed_time += (t2.tv_usec - t1.tv_usec) / 1000.0;   /* us to ms */
+	return elapsed_time;
+}
+
 static inline int float2int(double d)
 {
 	volatile union cast c;
@@ -742,6 +751,7 @@ struct velocity_field_thread_info {
 	int f; /* face */
 	float w;
 	struct velocity_field *vf;
+	double elapsed_time_ms;
 };
 
 /* Update 1 face of the 6 velocity maps (1 face for each side of the cubemap) */ 
@@ -752,10 +762,12 @@ static void *update_velocity_field_thread_fn(void *info)
 	float w = t->w;
 	struct velocity_field *vf = t->vf;
 	const int octaves = noise_levels - 1;
+	struct timeval start_time, end_time;
 
 	int i, j, vortex;
 	union vec3 v, c, ng;
 
+	gettimeofday(&start_time, NULL);
 	for (i = 0; i < vfdim; i++) {
 		for (j = 0; j < vfdim; j++) {
 			float band_speed, angle;
@@ -815,6 +827,8 @@ static void *update_velocity_field_thread_fn(void *info)
 			}
 		}
 	}
+	gettimeofday(&end_time, NULL);
+	t->elapsed_time_ms = timeval_difference(start_time, end_time);
 	return NULL;
 }
 
@@ -844,7 +858,10 @@ static void update_velocity_field(struct velocity_field *vf, float noise_scale, 
 					__func__, strerror(errno));
 	}
 	gettimeofday(&vfend, NULL);
-	printf("\nvelocity field computed in %lu seconds, running simulation\n",
+	printf("\n");
+	for (f = 0; f < 6; f++)
+		printf("Thread %d required %g ms\n", f, t[f].elapsed_time_ms);
+	printf("Velocity field computed in %lu seconds, running simulation\n",
 		vfend.tv_sec - vfbegin.tv_sec);
 	if (*use_wstep)
 		(*use_wstep)++;
