@@ -1275,6 +1275,8 @@ static void usage(void)
 	fprintf(stderr, "   -r, --restore-velocity-field: Instead of computing the velocity field from\n");
 	fprintf(stderr, "                                 scratch, import a previously saved velocity\n");
 	fprintf(stderr, "                                 field (see -d option, above)\n");
+	fprintf(stderr, "   -R, --random: Random values are used for bands, band-vel-factor, velocity-factor\n"
+			"                 noise-scale, and w-offset.  -S and -V options are also set.\n");
 	fprintf(stderr, "   -s, --stripe: Begin with stripes from a vertical strip of input image\n");
 	fprintf(stderr, "   -S, --sinusoidal: Use sinusoidal projection for input image\n");
 	fprintf(stderr, "                 Note: sinusoidal is the default projection.\n");
@@ -1291,10 +1293,11 @@ static void usage(void)
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Note: As noise-scale increases, velocity-factor should generally decrease.\n");
 	fprintf(stderr, "\n");
-	fprintf(stderr, "Example:\n");
+	fprintf(stderr, "Examples:\n");
         fprintf(stderr, "\n");
 	fprintf(stderr, "   ./gaseous-giganticus --noise-scale 2.5 --velocity-factor 1300 --bands 10\\\n"
 			"        -i input_image.png -o output_image\n");
+	fprintf(stderr, "   ./gaseous-giganticus -R -i input_image.png -o output_image\n");
 	fprintf(stderr, "\n");
 	exit(1);
 }
