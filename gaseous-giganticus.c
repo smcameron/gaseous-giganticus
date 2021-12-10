@@ -858,6 +858,8 @@ static void update_velocity_field(struct velocity_field *vf, float noise_scale, 
 	char *msg = "Calculating velocity field";
 
 	gettimeofday(&vfbegin, NULL);
+	if (first_time)
+		printf("Velocity field is 6x %dx%d\n", VFDIM, VFDIM);
 	printf("%s", msg); fflush(stdout);
 	for (f = 0; f < 6; f++) {
 		t[f].f = f;
@@ -1907,7 +1909,7 @@ int main(int argc, char *argv[])
 	t = nthreads - 1;
 	ti[t].last_particle = particle_count - 1;
 
-	printf("Allocating output image space\n");
+	printf("Allocating output image space, 6x %dx%d\n", DIM, DIM);
 	allocate_output_images(output_image, 4);
 	if (flowmap_dump_file)
 		allocate_output_images(flowmap_image, 3 + flowmap_has_alpha);
