@@ -118,6 +118,12 @@ static float w_offset = 0.0;
 static int random_mode;
 static int large_pixels = 0;
 
+struct timing_data {
+	struct timeval begin;
+	struct timeval end;
+	double elapsed;
+};
+
 /* velocity field for 6 faces of a cubemap */
 struct velocity_field {
 	union vec3 v[6][VFDIM][VFDIM];
@@ -1010,7 +1016,7 @@ static void *move_particles_thread_fn(void *info)
 	return NULL;
 }
 
-static void move_particles(struct particle *p, struct movement_thread_info *thr,
+static void create_move_particles_thread(struct particle *p, struct movement_thread_info *thr,
 			struct velocity_field *vf)
 {
 	int rc;
@@ -1021,6 +1027,32 @@ static void move_particles(struct particle *p, struct movement_thread_info *thr,
 	if (rc)
 		fprintf(stderr, "%s: create_thread failed: %s\n",
 				__func__, strerror(errno));
+}
+
+static void wait_for_movement_threads(struct movement_thread_info ti[], int nthreads)
+{
+	int i;
+	void *status;
+
+	for (i = 0; i < nthreads; i++) {
+		int rc = pthread_join(ti[i].thread, &status);
+		if (rc)
+			fprintf(stderr, "%s: pthread_join failed: %s\n",
+					__func__, strerror(errno));
+	}
+}
+
+static void move_particles(int nthreads, struct particle *p, struct movement_thread_info ti[],
+				struct velocity_field *vf, struct timing_data *timing)
+{
+	int t;
+
+	gettimeofday(&timing->begin, NULL);
+	for (t = 0; t < nthreads; t++)
+		create_move_particles_thread(particle, &ti[t], vf);
+	wait_for_movement_threads(ti, nthreads);
+	gettimeofday(&timing->end, NULL);
+	timing->elapsed += timeval_difference(timing->begin, timing->end);
 }
 
 struct image_thread_info {
@@ -1055,12 +1087,14 @@ static void *update_output_image_thread_fn(void *info)
 	return NULL;
 }
 
-static void update_output_images(int image_threads, struct particle p[], const int nparticles)
+static void update_output_images(int image_threads, struct particle p[], const int nparticles,
+			struct timing_data *timing)
 {
 	struct image_thread_info t[image_threads];
 	int i, rc;
 	void *status;
 
+	gettimeofday(&timing->begin, NULL);
 	for (i = 0; i < image_threads; i++) {
 		t[i].face = i;
 		t[i].p = p;
@@ -1079,14 +1113,18 @@ static void update_output_images(int image_threads, struct particle p[], const i
 	}
 	if (opacity > opacity_limit)
 		opacity = 0.95 * opacity;
+	gettimeofday(&timing->end, NULL);
+	timing->elapsed += timeval_difference(timing->begin, timing->end);
 }
 
-static void save_output_images(char *output_file_prefix, int sequence_number, unsigned char *image[6], int has_alpha)
+static void save_output_images(char *output_file_prefix, int sequence_number, unsigned char *image[6], int has_alpha,
+			struct timing_data *timing)
 {
 	int i;
 	char fname[PATH_MAX];
 	char *msg = "Saving Images";
 
+	gettimeofday(&timing->begin, NULL);
 	printf("%s", msg); fflush(stdout);
 	for (i = 0; i < 6; i++) {
 		if (sequence_number < 0)
@@ -1099,6 +1137,8 @@ static void save_output_images(char *output_file_prefix, int sequence_number, un
 	backspace(strlen(msg));
 	printf("o");
 	fflush(stdout);
+	gettimeofday(&timing->end, NULL);
+	timing->elapsed += timeval_difference(timing->begin, timing->end);
 }
 
 static void find_darkest_pixel(unsigned char *image, int w, int h,
@@ -1168,19 +1208,6 @@ static void free_output_images(unsigned char *image[6])
 	for (i = 0; i < 6; i++)
 		if (image[i])
 			free(image[i]);
-}
-
-static void wait_for_movement_threads(struct movement_thread_info ti[], int nthreads)
-{
-	int i;
-	void *status;
-
-	for (i = 0; i < nthreads; i++) {
-		int rc = pthread_join(ti[i].thread, &status);
-		if (rc)
-			fprintf(stderr, "%s: pthread_join failed: %s\n",
-					__func__, strerror(errno));
-	}
 }
 
 static void usage(void)
@@ -1851,6 +1878,24 @@ static void do_fluid_dynamics(void)
 	remove_divergences();
 }
 
+static void print_timing_info(int i, int niterations, struct timing_data *move, struct timing_data *image,
+				struct timing_data *png, struct timing_data *prog)
+{
+	if ((i % 50) == 0) {
+		gettimeofday(&prog->end, NULL);
+		prog->elapsed += timeval_difference(prog->begin, prog->end);
+		if (i != 0)
+			printf(" Part mvmt:%g ms  Render:%g ms  PNG:%g ms Elapsed:%g ms\n",
+				move->elapsed, image->elapsed, png->elapsed, prog->elapsed);
+		else
+			printf("\n");
+		printf("%5d / %5d ", i, niterations);
+	} else {
+		printf(".");
+	}
+	fflush(stdout);
+}
+
 int main(int argc, char *argv[])
 {
 	int i, t;
@@ -1858,16 +1903,13 @@ int main(int argc, char *argv[])
 	int last_imaged_iteration = -1;
 	int sequence_number = -1;
 	particle_count = NPARTICLES;
-	struct timeval movebegin, moveend, pngbegin, prog_begin;
-	struct timeval imagebegin, imageend, pngend, prog_end;
+	struct timing_data movetime, imagetime, pngtime, progtime;
 
-	double move_elapsed, image_elapsed, png_elapsed, prog_elapsed;
-
-	move_elapsed = 0.0;
-	image_elapsed = 0.0;
-	png_elapsed = 0;
-	prog_elapsed = 0;
-	gettimeofday(&prog_begin, NULL);
+	movetime.elapsed = 0.0;
+	imagetime.elapsed = 0.0;
+	pngtime.elapsed = 0;
+	progtime.elapsed = 0;
+	gettimeofday(&progtime.begin, NULL);
 
 	/* Allocate a ton of memory. We allocate these rather than
 	 * declaring them statically because if DIM is too large, the
@@ -1934,37 +1976,13 @@ int main(int argc, char *argv[])
 	dump_velocity_field(vf_dump_file, vf, use_wstep);
 
 	for (i = 0; i < niterations; i++) {
-		if ((i % 50) == 0) {
-			gettimeofday(&prog_end, NULL);
-			prog_elapsed = timeval_difference(prog_begin, prog_end);
-			if (i != 0)
-				printf(" Part mvmt:%g ms  Render:%g ms  PNG:%g ms Elapsed:%g ms\n",
-					move_elapsed, image_elapsed, png_elapsed, prog_elapsed);
-			else
-				printf("\n");
-			printf("%5d / %5d ", i, niterations);
-		} else {
-			printf(".");
-		}
-		fflush(stdout);
-
-		gettimeofday(&movebegin, NULL);
-		for (t = 0; t < nthreads; t++)
-			move_particles(particle, &ti[t], vf);
-		wait_for_movement_threads(ti, nthreads);
+		print_timing_info(i, niterations, &movetime, &imagetime, &pngtime, &progtime);
+		move_particles(nthreads, particle, ti, vf, &movetime);
 		do_fluid_dynamics();
-		gettimeofday(&moveend, NULL);
-		move_elapsed += timeval_difference(movebegin, moveend);
-		imagebegin = moveend;
-		update_output_images(image_threads, particle, particle_count);
-		gettimeofday(&imageend, NULL);
-		image_elapsed += timeval_difference(imagebegin, imageend);
+		update_output_images(image_threads, particle, particle_count, &imagetime);
 		if ((i % image_save_period) == 0) {
 			sequence_number += save_texture_sequence;
-			gettimeofday(&pngbegin, NULL);
-			save_output_images(output_file_prefix, sequence_number, output_image, 1);
-			gettimeofday(&pngend, NULL);
-			png_elapsed += timeval_difference(pngbegin, pngend);
+			save_output_images(output_file_prefix, sequence_number, output_image, 1, &pngtime);
 			last_imaged_iteration = i;
 		}
 		if (use_wstep && (i % wstep_period == 0)) {
@@ -1975,11 +1993,11 @@ int main(int argc, char *argv[])
 		if (i < flowmap_impressions)
 			maybe_compute_flowmap(particle_count, DIM);
 		if (i == flowmap_impressions && flowmap_dump_file)
-			save_output_images(flowmap_dump_file, -1, flowmap_image, flowmap_has_alpha);
+			save_output_images(flowmap_dump_file, -1, flowmap_image, flowmap_has_alpha, &pngtime);
 	}
 	if (last_imaged_iteration != i - 1) {
 		sequence_number += save_texture_sequence;
-		save_output_images(output_file_prefix, sequence_number, output_image, 1);
+		save_output_images(output_file_prefix, sequence_number, output_image, 1, &pngtime);
 	}
 	printf("\n%5d / %5d -- done.\n", i, niterations);
 	open_simplex_noise_free(ctx);
@@ -1995,9 +2013,9 @@ int main(int argc, char *argv[])
 	if (prev_particle_pos)
 		free(prev_particle_pos);
 
-	gettimeofday(&prog_end, NULL);
-	prog_elapsed = timeval_difference(prog_begin, prog_end);
-	printf("\nElapsed time: %g ms\n", prog_elapsed);
+	gettimeofday(&progtime.end, NULL);
+	progtime.elapsed = timeval_difference(progtime.begin, progtime.end);
+	printf("\nElapsed time: %g ms\n", progtime.elapsed);
 
 	return 0;
 }
