@@ -1380,6 +1380,7 @@ static void process_int_option(char *option_name, char *option_value, int *value
 static void set_automatic_options(int random_mode)
 {
 	struct timeval tv;
+	int has_vortices;
 
 	if (!random_mode)
 		return;
@@ -1391,11 +1392,19 @@ static void set_automatic_options(int random_mode)
 	vertical_bands = 0;
 	gettimeofday(&tv, NULL);
 	srand(tv.tv_usec);
+	has_vortices = (rand() % 1000) < 500;
 	noise_scale = ((float) rand() / (float) RAND_MAX) * 3.0 + 1.0;
 	velocity_factor = ((float) rand() / (float) RAND_MAX) * 1500.0 + 500.0;
 	band_speed_factor = ((float) rand() / (float) RAND_MAX) * 3.0;
 	num_bands = ((float) rand() / (float) RAND_MAX) * 10.0 + 5.0;
 	w_offset = ((float) rand() / (float) RAND_MAX) * 300.0;
+
+	if (has_vortices) {
+		vortex_band_threshold = ((float) rand() / (float) RAND_MAX) * 0.95 + 0.05;
+		vortex_size_variance =  ((float) rand() / (float) RAND_MAX) * 0.04;
+		vortex_size =  ((float) rand() / (float) RAND_MAX) * 0.04 + 0.02;
+		nvortices = ((float) rand() / (float) RAND_MAX) * MAXVORTICES;
+	}
 
 	printf("\n");
 	printf("Auto parameters:\n");
@@ -1404,6 +1413,12 @@ static void set_automatic_options(int random_mode)
 	printf("  --band-vel-factor %f\n", band_speed_factor);
 	printf("  --num_bands %f\n", num_bands);
 	printf("  --w-offset %f\n", w_offset);
+	if (has_vortices) {
+		printf("  --vortices %i\n", nvortices);
+		printf("  --vortex-size %f\n", vortex_size);
+		printf("  --vortex-size-variance %f\n", vortex_size_variance);
+		printf("  --vortex-band-threshold %f\n", vortex_band_threshold);
+	}
 	printf("\n");
 }
 
@@ -1930,8 +1945,8 @@ int main(int argc, char *argv[])
 	noise_scale = default_noise_scale;
 
 	process_options(argc, argv);
-	create_vortices();
 	set_automatic_options(random_mode);
+	create_vortices();
 
 	check_vf_dump_file(vf_dump_file);
 
