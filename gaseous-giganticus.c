@@ -854,9 +854,11 @@ static void update_velocity_field(struct velocity_field *vf, float noise_scale, 
 	void *status;
 	int f, rc;
 	struct timeval vfbegin, vfend;
+	static int first_time = 1;
+	char *msg = "Calculating velocity field";
 
 	gettimeofday(&vfbegin, NULL);
-	printf("Calculating velocity field"); fflush(stdout);
+	printf("%s", msg); fflush(stdout);
 	for (f = 0; f < 6; f++) {
 		t[f].f = f;
 		t[f].w = w;
@@ -873,11 +875,17 @@ static void update_velocity_field(struct velocity_field *vf, float noise_scale, 
 					__func__, strerror(errno));
 	}
 	gettimeofday(&vfend, NULL);
-	printf("\n");
-	for (f = 0; f < 6; f++)
-		printf("Thread %d required %g ms\n", f, t[f].elapsed_time_ms);
-	printf("Velocity field computed in %lu seconds, running simulation\n",
-		vfend.tv_sec - vfbegin.tv_sec);
+
+	if (first_time) {
+		printf("\n");
+		for (f = 0; f < 6; f++)
+			printf("Thread %d required %g ms\n", f, t[f].elapsed_time_ms);
+		printf("Velocity field computed in %lu seconds, running simulation\n",
+			vfend.tv_sec - vfbegin.tv_sec);
+		first_time = 0;
+	} else {
+		backspace(strlen(msg));
+	}
 	if (*use_wstep)
 		(*use_wstep)++;
 }
