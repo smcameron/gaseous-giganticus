@@ -854,7 +854,7 @@ static void *update_velocity_field_thread_fn(void *info)
 }
 
 /* compute velocity field for all cells in cubemap.  It is scaled curl of gradient of noise field */
-static void update_velocity_field(struct velocity_field *vf, float noise_scale, float w, int *use_wstep)
+static void update_velocity_field(struct velocity_field *vf, float w, int *use_wstep)
 {
 	struct velocity_field_thread_info t[6];
 	void *status;
@@ -1049,7 +1049,7 @@ static void move_particles(int nthreads, struct particle *p, struct movement_thr
 
 	gettimeofday(&timing->begin, NULL);
 	for (t = 0; t < nthreads; t++)
-		create_move_particles_thread(particle, &ti[t], vf);
+		create_move_particles_thread(p, &ti[t], vf);
 	wait_for_movement_threads(ti, nthreads);
 	gettimeofday(&timing->end, NULL);
 	timing->elapsed += timeval_difference(timing->begin, timing->end);
@@ -1823,7 +1823,7 @@ static void encode_vec2_in_red_green(unsigned char *image, int i, int j, union v
 /* Compute a flow map in which particle velocity is represented as 6 images of
  * a cubemap with x and y velocities encoded in R and G channels
  */
-static void maybe_compute_flowmap(int nparticles, int dim)
+static void maybe_compute_flowmap(int nparticles)
 {
 	static float scaling_factor = 1.1e6;
 	union vec2 pv;
@@ -1990,7 +1990,7 @@ int main(int argc, char *argv[])
 			start_image_width, start_image_height, start_image_bytes_per_row);
 	init_particles(&particle, &prev_particle_pos, particle_count);
 	if (restore_velocity_field(vf_dump_file, vf))
-		update_velocity_field(vf, noise_scale, w_offset, &use_wstep);
+		update_velocity_field(vf, w_offset, &use_wstep);
 	dump_velocity_field(vf_dump_file, vf, use_wstep);
 
 	for (i = 0; i < niterations; i++) {
@@ -2005,11 +2005,11 @@ int main(int argc, char *argv[])
 		}
 		if (use_wstep && (i % wstep_period == 0)) {
 			w_offset += wstep;
-			update_velocity_field(vf, noise_scale, w_offset, &use_wstep);
+			update_velocity_field(vf, w_offset, &use_wstep);
 			dump_velocity_field(vf_dump_file, vf, use_wstep);
 		}
 		if (i < flowmap_impressions)
-			maybe_compute_flowmap(particle_count, DIM);
+			maybe_compute_flowmap(particle_count);
 		if (i == flowmap_impressions && flowmap_dump_file)
 			save_output_images(flowmap_dump_file, -1, flowmap_image, flowmap_has_alpha, &pngtime);
 	}
