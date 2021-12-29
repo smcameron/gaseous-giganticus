@@ -30,15 +30,18 @@ int png_utils_write_png_image(const char *filename, unsigned char *pixels, int w
 	png_structp png_ptr;
 	png_infop info_ptr;
 	png_byte **row;
-	int x, y, rc, colordepth = 8;
+	int x, y, *rc, rv, colordepth = 8;
 	int bytes_per_pixel = has_alpha ? 4 : 3;
 	FILE *f;
 
-	rc = -1; /* assume failure until we eventually succeed */
+	rc = malloc(sizeof(*rc)); /* allocate on the heap to avoid longjmp clobbering rc */
+	if (!rc)
+		return -1;
+	*rc = -1; /* assume failure until we eventually succeed */
 	f = fopen(filename, "wb");
 	if (!f) {
 		fprintf(stderr, "fopen: %s:%s\n", filename, strerror(errno));
-		return -1;
+		goto cleanup0;	
 	}
 	png_ptr = png_create_write_struct(PNG_LIBPNG_VER_STRING, NULL, NULL, NULL);
 	if (!png_ptr)
@@ -86,12 +89,15 @@ int png_utils_write_png_image(const char *filename, unsigned char *pixels, int w
 	for (y = 0; y < h; y++)
 		png_free(png_ptr, row[y]);
 	png_free(png_ptr, row);
-	rc = 0; /* success */
+	*rc = 0; /* success */
 cleanup2:
 	png_destroy_write_struct(&png_ptr, &info_ptr);
 cleanup1:
 	fclose(f);
-	return rc;
+cleanup0:
+	rv = *rc;
+	free(rc);
+	return rv;
 }
 
 char *png_utils_read_png_image(const char *filename, int flipVertical, int flipHorizontal,
@@ -105,6 +111,7 @@ char *png_utils_read_png_image(const char *filename, int flipVertical, int flipH
 	png_infop info_ptr = NULL;
 	png_infop end_info = NULL;
 	png_byte *image_data = NULL;
+	png_byte **image_data_ptr = NULL;
 
 	FILE *fp = fopen(filename, "rb");
 	if (!fp) {
@@ -112,6 +119,14 @@ char *png_utils_read_png_image(const char *filename, int flipVertical, int flipH
 			filename, strerror(errno));
 		return 0;
 	}
+
+	image_data_ptr = malloc(sizeof(*image_data_ptr));
+	if (!image_data_ptr) {
+		snprintf(whynot, whynotlen, "Failed to allocate image_data_ptr");
+		fclose(fp);
+		return 0;
+	}
+	*image_data_ptr = NULL;
 
 	if (fread(header, 1, 8, fp) != 8) {
 		snprintf(whynot, whynotlen, "Failed to read 8 byte header from '%s'\n",
@@ -195,6 +210,7 @@ char *png_utils_read_png_image(const char *filename, int flipVertical, int flipH
 		snprintf(whynot, whynotlen, "malloc failed in load_png_texture");
 		goto cleanup;
 	}
+	*image_data_ptr = image_data;
 
 	int bytes_per_pixel = (color_type == PNG_COLOR_TYPE_RGB_ALPHA ? 4 : 3);
 
@@ -233,8 +249,11 @@ char *png_utils_read_png_image(const char *filename, int flipVertical, int flipH
 	return (char *) image_data;
 
 cleanup:
-	if (image_data)
-		free(image_data);
+	if (image_data_ptr) {
+		if (*image_data_ptr)
+			free(*image_data_ptr);
+		free(image_data_ptr);
+	}
 	png_destroy_read_struct(&png_ptr, &info_ptr, &end_info);
 	fclose(fp);
 	return 0;
