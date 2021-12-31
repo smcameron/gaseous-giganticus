@@ -32,6 +32,7 @@ gaseous-giganticus \- make 6 images forming a cube map for a gas giant planet
 [ -R ]
 [ -s stripe ]
 [ -t thread-count ]
+[ -T thread-iterations ]
 [ -v velocity-factor ]
 [ -V ]
 [ -w w-offset ]
@@ -233,6 +234,14 @@ Sinusoidal is the default image projection.
 -t, --threads
 Use the specified number of CPU threads up to the
 number of online CPUs.  Default is number of online CPUs.
+.TP
+-T, --thread-iterations
+Number of iterations particle movement threads should execute before joining
+and painting particles.  Default is 1.  Increasing this can increase the ratio
+of CPU time spent moving particles as compared to painting particles, potentially
+reducing total elapsed time. However, if too high, particles may move too far
+between painting. You may also wish to decrease image-save-period if you increase
+thread-iterations. Image-save-period is by default every 20 thread invocations.
 .TP
 --vortex-band-threshold
 This option works in conjunction with the --bands option.  The --bands option specifies how

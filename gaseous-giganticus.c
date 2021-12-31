@@ -48,6 +48,7 @@ static struct osn_context *ctx;
 static int particle_count = NPARTICLES;
 
 static int nthreads = 4;
+static int thread_iterations = 1;
 static int user_threads = -1;
 static const int image_threads = 6; /* for 6 faces of cubemap, don't change this */
 static char *default_output_file_prefix = "gasgiant-";
@@ -158,6 +159,7 @@ struct movement_thread_info {
 	pthread_t thread;
 	struct particle *p; /* ptr to particle[], above */
 	struct velocity_field *vf; /* ptr to vf, above. */
+	int iterations;
 };
 
 union cast {
@@ -1011,18 +1013,20 @@ static void *move_particles_thread_fn(void *info)
 {
 	struct movement_thread_info *thr = info;
 
-	for (int i = thr->first_particle; i <= thr->last_particle; i++)
-		move_particle(&thr->p[i], thr->vf, prev_particle_pos ? &prev_particle_pos[i] : NULL);
+	for (int i = 0; i < thr->iterations; i++)
+		for (int j = thr->first_particle; j <= thr->last_particle; j++)
+			move_particle(&thr->p[j], thr->vf, prev_particle_pos ? &prev_particle_pos[j] : NULL);
 	return NULL;
 }
 
 static void create_move_particles_thread(struct particle *p, struct movement_thread_info *thr,
-			struct velocity_field *vf)
+			struct velocity_field *vf, int thread_iterations)
 {
 	int rc;
 
 	thr->vf = vf;
 	thr->p = p;
+	thr->iterations = thread_iterations;
 	rc = create_thread(&thr->thread, move_particles_thread_fn, thr, "move-particles", 0);
 	if (rc)
 		fprintf(stderr, "%s: create_thread failed: %s\n",
@@ -1043,13 +1047,14 @@ static void wait_for_movement_threads(struct movement_thread_info ti[], int nthr
 }
 
 static void move_particles(int nthreads, struct particle *p, struct movement_thread_info ti[],
-				struct velocity_field *vf, struct timing_data *timing)
+				struct velocity_field *vf, struct timing_data *timing,
+				int thread_iterations)
 {
 	int t;
 
 	gettimeofday(&timing->begin, NULL);
 	for (t = 0; t < nthreads; t++)
-		create_move_particles_thread(p, &ti[t], vf);
+		create_move_particles_thread(p, &ti[t], vf, thread_iterations);
 	wait_for_movement_threads(ti, nthreads);
 	gettimeofday(&timing->end, NULL);
 	timing->elapsed += timeval_difference(timing->begin, timing->end);
@@ -1277,6 +1282,9 @@ static void usage(void)
 	fprintf(stderr, "                 Note: --stripe and --sinusoidal are mutually exclusive\n");
 	fprintf(stderr, "   -t, --threads: Use the specified number of CPU threads up to the\n");
 	fprintf(stderr, "                   number of online CPUs\n");
+	fprintf(stderr, "   -T, --thread-iterations: Number of iterations of thread movement particles\n");
+	fprintf(stderr, "         before threads join. Default is 1. Higher values will reduce the number\n");
+	fprintf(stderr, "         of times threads are created and destroyed.\n");
 	fprintf(stderr, "   -v, --velocity-factor: Multiply velocity field by this number when\n");
 	fprintf(stderr, "                   moving particles.  Default is 1200.0\n");
 	fprintf(stderr, "   -V, --vertical-bands:  Make bands rotate around Y axis instead of X\n");
@@ -1336,6 +1344,7 @@ static struct option long_options[] = {
 	{ "stripe", no_argument, NULL, 's' },
 	{ "sinusoidal", no_argument, NULL, 'S' },
 	{ "threads", required_argument, NULL, 't' },
+	{ "thread-iterations", required_argument, NULL, 'T' },
 	{ "particles", required_argument, NULL, 'p' },
 	{ "plainmap", required_argument, NULL, 'P' },
 	{ "speed-multiplier", required_argument, NULL, 'm' },
@@ -1431,7 +1440,7 @@ static void process_options(int argc, char *argv[])
 
 	while (1) {
 		int option_index;
-		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:e:f:g:F:hHi:k:I:lL:nNm:o:O:p:PRr:sSt:Vv:w:W:x:z:",
+		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:e:f:g:F:hHi:k:I:lL:nNm:o:O:p:PRr:sSt:T:Vv:w:W:x:z:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -1576,6 +1585,9 @@ static void process_options(int argc, char *argv[])
 			break;
 		case 't':
 			process_int_option("threads", optarg, &user_threads);
+			break;
+		case 'T':
+			process_int_option("thread-iterations", optarg, &thread_iterations);
 			break;
 		case 'w':
 			process_float_option("w-offset", optarg, &w_offset);
@@ -1995,7 +2007,7 @@ int main(int argc, char *argv[])
 
 	for (i = 0; i < niterations; i++) {
 		print_timing_info(i, niterations, &movetime, &imagetime, &pngtime, &progtime);
-		move_particles(nthreads, particle, ti, vf, &movetime);
+		move_particles(nthreads, particle, ti, vf, &movetime, thread_iterations);
 		do_fluid_dynamics();
 		update_output_images(image_threads, particle, particle_count, &imagetime);
 		if ((i % image_save_period) == 0) {
