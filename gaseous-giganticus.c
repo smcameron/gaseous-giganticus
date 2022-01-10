@@ -119,6 +119,8 @@ static int image_save_period = 25;
 static float w_offset = 0.0;
 static int random_mode;
 static int large_pixels = 0;
+static int export_equirect_image = 0;
+static int equirect_height = 0;
 
 struct timing_data {
 	struct timeval begin;
@@ -1125,6 +1127,59 @@ static void update_output_images(int image_threads, struct particle p[], const i
 	timing->elapsed += timeval_difference(timing->begin, timing->end);
 }
 
+static void maybe_save_equirectangular_images(char *output_file_prefix, int sequence_number,
+			unsigned char *image[6], int has_alpha)
+{
+	char fname[PATH_MAX];
+	int h, w, x, y;
+	unsigned char *input_pixel, *output_pixel, *equirect;
+	union vec3 p;
+	struct fij fij;
+	float latitude, longitude;
+	int px, py;
+
+	if (!export_equirect_image)
+		return;
+
+	if (sequence_number < 0)
+		sprintf(fname, "%s-eqr.png", output_file_prefix);
+	else
+		sprintf(fname, "%s%04d-eqr.png", output_file_prefix, sequence_number);
+	h = equirect_height;
+	w = 2 * equirect_height;
+	equirect = calloc(1, h * w * 4);
+	memset(equirect, 255, h * w * 4);
+	for (y = 0; y < h; y++) {
+		latitude = ((float) y / (float) h) * M_PI - M_PI / 2;
+		for (x = 0; x < w; x++) {
+			output_pixel = equirect + 4 * (y * w  + x);
+			longitude = ((float) x / (float) w) * 2.0 * M_PI;
+
+			if (!vertical_bands) {
+				p.v.x = cosf(longitude) * cosf(latitude);
+				p.v.z = sinf(longitude) * cosf(latitude);
+				p.v.y = sinf(latitude);
+			} else {
+				p.v.x = cosf(longitude) * cosf(latitude);
+				p.v.y = sinf(longitude) * cosf(latitude);
+				p.v.z = sinf(latitude);
+			}
+			fij = xyz_to_fij(&p, DIM);
+
+			px = fij.i * (3 + !!has_alpha);
+			py = fij.j * (3 + !!has_alpha) * XDIM;
+
+			input_pixel = &image[fij.f][py + px];
+			output_pixel[0] = input_pixel[0];
+			output_pixel[1] = input_pixel[1];
+			output_pixel[2] = input_pixel[2];
+			output_pixel[3] = 255;
+		}
+	}
+	if (png_utils_write_png_image(fname, equirect, w, h, 1, 0))
+			fprintf(stderr, "Failed to write %s\n", fname);
+}
+
 static void save_output_images(char *output_file_prefix, int sequence_number, unsigned char *image[6], int has_alpha,
 			struct timing_data *timing)
 {
@@ -1142,6 +1197,7 @@ static void save_output_images(char *output_file_prefix, int sequence_number, un
 		if (png_utils_write_png_image(fname, image[i], DIM, DIM, has_alpha, 0))
 			fprintf(stderr, "Failed to write %s\n", fname);
 	}
+	maybe_save_equirectangular_images(output_file_prefix, sequence_number, image, has_alpha);
 	backspace(strlen(msg));
 	printf("o");
 	fflush(stdout);
@@ -1243,6 +1299,9 @@ static void usage(void)
 	fprintf(stderr, "	cos(K*latitude) ^ band-speed-power, where band-speed-power is an\n");
 	fprintf(stderr, "	odd integer. By default, 1, higher values make the fast moving part\n");
 	fprintf(stderr, "	of the bands narrow and the parts between wider.\n");
+	fprintf(stderr, "   -E, --equirectangular image-height. Output an equirectangular image in\n");
+	fprintf(stderr, "         addition to the usual cubemap images.  The image height must be\n");
+	fprintf(stderr, "         an integer power of 2.\n");
 	fprintf(stderr, "   -f, --fbm-falloff: Use specified falloff for FBM noise.  Default is 0.5\n");
 	fprintf(stderr, "   -F, --vfdim: Set size of velocity field.  Default:2048. Min: 16. Max: 2048\n");
 	fprintf(stderr, "   -g, --gain, 2nd and later octaves are multiplied by pow(fbm-falloff, (octave-1)*gain)\n");
@@ -1364,6 +1423,7 @@ static struct option long_options[] = {
 	{ "vortex-size-variance", required_argument, NULL, VORTEX_SIZE_VARIANCE_OPTION },
 	{ "noise-scale", required_argument, NULL, 'z' },
 	{ "band-speed-power", required_argument, NULL, 'e' },
+	{ "equirectangular", required_argument, NULL, 'E' },
 	{ "dump-flowmap", required_argument, NULL, DUMP_FLOWMAP_OPTION },
 	{ "trap-nans", no_argument, NULL, TRAP_NANS_OPTION },
 	{ 0, 0, 0, 0 },
@@ -1438,6 +1498,19 @@ static void set_automatic_options(int random_mode)
 	printf("\n");
 }
 
+static int is_power_of_2(int n)
+{
+	int setbits = 0;
+	int i;
+
+	for (i = 0; (size_t) i < sizeof(int) * 8; i++) {
+		if (n & 0x01)
+			setbits++;
+		n = n >> 1;
+	}
+	return (setbits == 1);
+}
+
 static void process_options(int argc, char *argv[])
 {
 	int i, c;
@@ -1447,7 +1520,7 @@ static void process_options(int argc, char *argv[])
 
 	while (1) {
 		int option_index;
-		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:e:f:g:F:hHi:k:I:lL:nNm:o:O:p:PRr:sSt:T:Vv:w:W:x:z:",
+		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:e:E:f:g:F:hHi:k:I:lL:nNm:o:O:p:PRr:sSt:T:Vv:w:W:x:z:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -1485,6 +1558,15 @@ static void process_options(int argc, char *argv[])
 				usage();
 			}
 			band_speed_powerf = (float) band_speed_power;
+			break;
+		case 'E':
+			process_int_option("equirectangular", optarg, &equirect_height);
+			if (equirect_height < 1 || !is_power_of_2(equirect_height)) {
+				fprintf(stderr, "Equirectangular height %d, must be integer power of 2.\n",
+					equirect_height);
+				usage();
+			}
+			export_equirect_image = 1;
 			break;
 		case 'r':
 			vf_dump_file = optarg;
@@ -1968,6 +2050,7 @@ int main(int argc, char *argv[])
 
 	process_options(argc, argv);
 	set_automatic_options(random_mode);
+	printf("vertical_bands = %d\n", vertical_bands);
 	create_vortices();
 
 	check_vf_dump_file(vf_dump_file);

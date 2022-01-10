@@ -6,11 +6,13 @@ gaseous-giganticus \- make 6 images forming a cube map for a gas giant planet
 .B gaseous-giganticus 
 [ -a pole-attenuation ]
 [ -b bands ]
-[ -d velocity-field-data-file ]
-[ -D fade-rate ]
 [ -B band-velocity-factor ]
 [ -c count ]
 [ -C ]
+[ -d velocity-field-data-file ]
+[ -D fade-rate ]
+[ -e band-speed-power ]
+[ -E image-height ]
 [ -d velocity-field-dumpfile ]
 [ -f fbm-falloff ]
 [ -g gain ]
@@ -109,6 +111,16 @@ ABC-6.png
 -D, --fade-rate
 Particle fade rate.  Default is 0.01
 .TP
+-e band-speed-power
+Controls width of counter-rotating bands. The value must be an odd positive integer.
+Default is 1.
+.TP
+-E, --equirectangular
+Output an equirectangular image in addition to the usual cubemap images.
+The image height must be an integer power of 2. The image width will be
+twice the height. The file will be named ending with "-eqr.png".
+(See -o option).
+.TP
 -i, --input
 Input image filename.  Must be RGB or RGBA png file.
 .TP
@@ -136,7 +148,9 @@ values for them.
 .TP
 -o, --output
 Output image filename template.  Example: 'out-' will
-produces 6 output files, out-0.png, out-1.png, ..., out-5.png
+produces 6 output files, out-0.png, out-1.png, ..., out-5.png.
+If the -E option is active, an additional equirectangular image
+will be output, out-eqr.png.
 .TP
 -O, --opacity
 Specifies lower bound on particle opacity between 0.0 (transparent) and 1.0 (opaque).
