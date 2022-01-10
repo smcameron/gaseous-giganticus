@@ -91,6 +91,7 @@ int png_utils_write_png_image(const char *filename, unsigned char *pixels, int w
 	png_free(png_ptr, row);
 	*rc = 0; /* success */
 cleanup2:
+	bytes_per_pixel = 0; /* shut -Wextra up about longjmp clobbering this. */
 	png_destroy_write_struct(&png_ptr, &info_ptr);
 cleanup1:
 	fclose(f);
