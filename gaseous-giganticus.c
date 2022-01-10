@@ -34,6 +34,7 @@
 #include <getopt.h>
 #include <locale.h>
 #include <sys/time.h>
+#include <fenv.h>
 
 #include "mtwist.h"
 #include "mathutils.h"
@@ -1285,6 +1286,8 @@ static void usage(void)
 	fprintf(stderr, "   -T, --thread-iterations: Number of iterations of thread movement particles\n");
 	fprintf(stderr, "         before threads join. Default is 1. Higher values will reduce the number\n");
 	fprintf(stderr, "         of times threads are created and destroyed.\n");
+	fprintf(stderr, "   --trap-nans: trap divide by zero, overflow and invalid floating point\n");
+	fprintf(stderr, "                exceptions\n");
 	fprintf(stderr, "   -v, --velocity-factor: Multiply velocity field by this number when\n");
 	fprintf(stderr, "                   moving particles.  Default is 1200.0\n");
 	fprintf(stderr, "   -V, --vertical-bands:  Make bands rotate around Y axis instead of X\n");
@@ -1314,6 +1317,7 @@ static void usage(void)
 #define VORTEX_SIZE_VARIANCE_OPTION 1001
 #define VORTEX_BAND_THRESHOLD_OPTION 1002
 #define DUMP_FLOWMAP_OPTION 1003
+#define TRAP_NANS_OPTION 1004
 
 static struct option long_options[] = {
 	{ "pole-attenuation", required_argument, NULL, 'a' },
@@ -1359,6 +1363,7 @@ static struct option long_options[] = {
 	{ "noise-scale", required_argument, NULL, 'z' },
 	{ "band-speed-power", required_argument, NULL, 'e' },
 	{ "dump-flowmap", required_argument, NULL, DUMP_FLOWMAP_OPTION },
+	{ "trap-nans", no_argument, NULL, TRAP_NANS_OPTION },
 	{ 0, 0, 0, 0 },
 };
 
@@ -1630,6 +1635,9 @@ static void process_options(int argc, char *argv[])
 			break;
 		case DUMP_FLOWMAP_OPTION:
 			flowmap_dump_file = optarg;
+			break;
+		case TRAP_NANS_OPTION:
+			feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 			break;
 		default:
 			fprintf(stderr, "unknown option '%s'\n",
