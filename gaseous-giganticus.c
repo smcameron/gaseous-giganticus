@@ -819,9 +819,11 @@ static void *update_velocity_field_thread_fn(void *info)
 					bv.v.z = -ov.v.x;
 					bv.v.y = 0;
 				}
-				vec3_normalize_self(&bv);
-				vec3_mul_self(&bv, band_speed);
-				vec3_add_self(&vf->v[f][i][j], &bv);
+				if (fabsf(vec3_magnitude(&bv)) > 1e-20) { /* watch out for NaNs */
+					vec3_normalize_self(&bv);
+					vec3_mul_self(&bv, band_speed);
+					vec3_add_self(&vf->v[f][i][j], &bv);
+				}
 			}
 
 			/* Calculate artificial vortex influence. */
