@@ -2054,7 +2054,6 @@ int main(int argc, char *argv[])
 
 	process_options(argc, argv);
 	set_automatic_options(random_mode);
-	printf("vertical_bands = %d\n", vertical_bands);
 	create_vortices();
 
 	check_vf_dump_file(vf_dump_file);
