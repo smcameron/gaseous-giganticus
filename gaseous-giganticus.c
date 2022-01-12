@@ -1081,6 +1081,8 @@ static void *update_output_image_thread_fn(void *info)
 	struct particle *p = t->p;
 	int i, j;
 	const int octaves = noise_levels - 1;
+	/* 0.29289322 == 1 - 1/sqrt(2). */
+	const float opacity_filter[] = {0.5, 0.29289322, 0.5, 0.29289322, 0.5, 0.29289322, 0.5, 0.29289322};
 
 	if (!nofade)
 		fade_out_background(t->face, &darkest_color);
@@ -1090,8 +1092,10 @@ static void *update_output_image_thread_fn(void *info)
 		p[i].c.a = opacity;
 		paint_particle(t->face, p[i].fij.i, p[i].fij.j, &p[i].c, octaves);
 		if (large_pixels) {
-			for (j = 0; j < 8; j++)
+			for (j = 0; j < 8; j++) {
+				p[i].c.a = opacity * opacity_filter[j];
 				paint_particle(t->face, p[i].fij.i + xo[j], p[i].fij.j + yo[j], &p[i].c, octaves);
+			}
 		}
 	}
 	return NULL;
