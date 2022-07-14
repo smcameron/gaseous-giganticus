@@ -58,12 +58,13 @@ Simplex noise field.   For each element in each of the 6 arrays, the
 gradient in 3 dimensions is taken, forming a 3D vector.  The curl 
 of this gradient field relative to the surface of a sphere enclosing the
 cube is taken.  That is, each gradient vector is projected onto
-the surface of a sphere enclosing the cube.  Depending on whether the
-original gradient vector was "uphill" or "downhill" relative to the
-surface of the sphere (pointing more away from or towards the center
-of the sphere) the gradient vector is turned 90 degrees left or right,
-respectively, within the plane tangent to the surface of the sphere
-at that point.  This will produce a non-divergent velocity field which
+the surface of a sphere enclosing the cube.
+The gradient vector is rotated 90 degrees about an axis passing through
+the center of the sphere and a point on the surface of the sphere
+corresponding to the array position, always the same direction
+(always clockwise or counterclockwise, doesn't matter which, so long
+as it's always the same),
+This will produce a non-divergent velocity field which
 can be used as a kind of fake incompressible fluid flow simulation.
 Then, the velocity field is modified to add counter rotating bands.
 .PP
