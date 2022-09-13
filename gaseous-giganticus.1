@@ -107,14 +107,16 @@ Dump out velocity field data to the specified file after initial calculation.
 Dump out velocity field data to a series of six RGB png files with x and y velocities
 encoded in the R and G channels. If the output-file is specified as, e.g. 'ABC', then
 the output files will be ABC-1.png, ABC-2.png, ABC-3.png, ABC-4.png, ABC-5.png and
-ABC-6.png
+ABC-6.png  Note: The flowmap produced by this option is not correct, and has problems
+at the seams between the cube faces. I tried 3 different ways to make this work but
+never succeeded.
 .TP
 -D, --fade-rate
 Particle fade rate.  Default is 0.01
 .TP
 -e band-speed-power
-Controls width of counter-rotating bands. The value must be an odd positive integer.
-Default is 1.
+An exponent that controls width of counter-rotating bands. The value must be an odd
+positive integer.  Default is 1.
 .TP
 -E, --equirectangular
 Output an equirectangular image in addition to the usual cubemap images.
@@ -130,8 +132,13 @@ Interval of simulation iterations after which to output images.  Default is to
 output images every 20 iterations of the simulation.
 .TP
 -k, --cubemap
-Prefix of 6 cubemap RGB or RGBA png images to which '[x].png' is appended
-with [x] taking on the values 0 through 5.
+Allow specifying a cubemap image as input to be used as a starting point.
+The name specified is used as a prefix of 6 cubemap RGB or RGBA png images
+to which '[x].png' is appended with [x] taking on the values 0 through 5.
+By using this, the output of gaseous-giganticus can be used as input, and
+further swirling may be done, e.g. at different scales, or the output of
+other programs that produce cubemaps may be "swirled" to create
+for example cloud cover images for earthlike planets.
 .TP
 -l, --large-pixels
 Use 3x3 pixels for particles instead of single pixel particles.  The allows getting away
@@ -163,7 +170,7 @@ repetitive results.
 .TP
 -W, --wstep amount
 w offset is periodically adjusted by specified amount and velocity field
-is periodically recalculated.
+is periodically recalculated. Note: this will drastically increase runtime.
 .TP
 --wstep-period period
 Number of simulation iterations to run between updating the w value of the
@@ -210,6 +217,8 @@ This may be useful for producing a sequence of textures for animation.
 .TP
 -p, --particle-count
 Use specified number of particles.  Default is 8000000.
+Using a smaller number may be useful for reducing runtime and
+getting a lower quality preview of how things will look.
 .TP
 -P, --plainmap
 Use input image 6 times as the six faces of a cubemap.  This used to be the
@@ -234,7 +243,8 @@ instead of calculating it from scratch.  This can save a lot of time if you are
 happy with the fluid flows, but are experimenting with different input images.
 .TP
 -R, --random
-Random values are used for bands, band-vel-factor, velocity-factor, noise-scale, and w-offset.
+Random values chosen from reasonable ranges are used for bands,
+band-vel-factor, velocity-factor, noise-scale, and w-offset.
 -S and -V options are also set.
 .TP
 -s, --stripe
