@@ -2053,7 +2053,7 @@ static void print_timing_info(int i, int niterations, struct timing_data *move, 
 {
 	if ((i % 50) == 0) {
 		gettimeofday(&prog->end, NULL);
-		prog->elapsed += timeval_difference(prog->begin, prog->end);
+		prog->elapsed = timeval_difference(prog->begin, prog->end);
 		if (i != 0)
 			printf(" Part mvmt:%g ms  Render:%g ms  PNG:%g ms Elapsed:%g ms\n",
 				move->elapsed, image->elapsed, png->elapsed, prog->elapsed);
