@@ -35,6 +35,7 @@
 #include <locale.h>
 #include <sys/time.h>
 #include <fenv.h>
+#include <sys/mman.h>
 
 #include "mtwist.h"
 #include "mathutils.h"
@@ -89,6 +90,8 @@ static float fade_rate = -1.0;
 static int save_texture_sequence = 0;
 static int magic_fluid_flow = 0; /* 0 = skip fluid dynamics, 1 = do fluid dynamics (not yet implemented) */
 
+static int use_huge_pages = 1;
+const size_t huge_page_size = (1 << 21); /* 2 MiB */
 #define DIM 1024 /* dimensions of cube map face images */
 #define VFDIM 2048 /* dimension of velocity field. (2 * DIM) is reasonable */
 static int vfdim = VFDIM;
@@ -630,6 +633,25 @@ static const float face_to_xdim_multiplier[] = { 0.25, 0.5, 0.75, 0.0, 0.25, 0.2
 static const float face_to_ydim_multiplier[] = { 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0,
 						0.0, 2.0 / 3.0 };
 
+static void *allocate_particles(int nparticles)
+{
+	void *x;
+	int rc;
+
+#ifdef __linux__
+	if (use_huge_pages) {
+		rc = posix_memalign(&x, huge_page_size, nparticles * sizeof(struct particle));
+		if (!rc) {
+			madvise(x, nparticles * sizeof(struct particle), MADV_HUGEPAGE);
+			return x;
+		}
+		fprintf(stderr, "posix_memalign returned %d (%d = ENOMEM, %d = EINVAL), falling back to malloc\n",
+				rc, ENOMEM, EINVAL);
+	}
+#endif
+	return malloc(nparticles * sizeof(struct particle));
+}
+
 /* place particles randomly on the surface of a sphere */
 static void init_particles(struct particle **pp, union vec3 **prev_particle_pos, const int nparticles)
 {
@@ -641,11 +663,13 @@ static void init_particles(struct particle **pp, union vec3 **prev_particle_pos,
 	struct particle *p;
 
 	printf("Initializing %d particles", nparticles); fflush(stdout);
-	*pp = malloc(sizeof(**pp) * nparticles);
+	*pp = allocate_particles(nparticles);
 	p = *pp;
 
-	if (flowmap_dump_file)
-		*prev_particle_pos = calloc(nparticles, sizeof(**prev_particle_pos));
+	if (flowmap_dump_file) {
+		*prev_particle_pos = allocate_particles(nparticles);
+		memset(prev_particle_pos, 0, nparticles * sizeof(struct particle));
+	}
 
 	for (int i = 0; i < nparticles; i++) {
 		random_point_on_sphere((float) XDIM / 2.0f, &x, &y, &z);
@@ -1263,10 +1287,25 @@ static char *load_image(const char *filename, int *w, int *h, int *a, int *bytes
 
 void allocate_output_images(unsigned char *image[6], int bytes_per_pixel)
 {
-	int i;
+	int i, rc;
+	void *x;
 
-	for (i = 0; i < 6; i++)
+	for (i = 0; i < 6; i++) {
+#ifdef __linux__
+		if (use_huge_pages) {
+			rc = posix_memalign(&x, huge_page_size, bytes_per_pixel * DIM * DIM);
+			if (!rc) {
+				madvise(x, bytes_per_pixel * DIM * DIM, MADV_HUGEPAGE);
+				image[i] = x;
+				memset(image[i], 0, bytes_per_pixel * DIM * DIM);
+				continue;
+			}
+			fprintf(stderr, "%s:%d: posix_memalign() failed, falling back to calloc()\n",
+					__FILE__, __LINE__);
+		}
+#endif
 		image[i] = calloc(1, bytes_per_pixel * DIM * DIM);
+	}
 }
 
 static void free_output_images(unsigned char *image[6])
@@ -1383,6 +1422,7 @@ static void usage(void)
 #define VORTEX_BAND_THRESHOLD_OPTION 1002
 #define DUMP_FLOWMAP_OPTION 1003
 #define TRAP_NANS_OPTION 1004
+#define NO_HUGE_PAGES 1005
 
 static struct option long_options[] = {
 	{ "pole-attenuation", required_argument, NULL, 'a' },
@@ -1430,6 +1470,7 @@ static struct option long_options[] = {
 	{ "equirectangular", required_argument, NULL, 'E' },
 	{ "dump-flowmap", required_argument, NULL, DUMP_FLOWMAP_OPTION },
 	{ "trap-nans", no_argument, NULL, TRAP_NANS_OPTION },
+	{ "no-huge-pages", no_argument, NULL, NO_HUGE_PAGES },
 	{ 0, 0, 0, 0 },
 };
 
@@ -1727,6 +1768,9 @@ static void process_options(int argc, char *argv[])
 		case TRAP_NANS_OPTION:
 			feenableexcept(FE_DIVBYZERO | FE_INVALID | FE_OVERFLOW);
 			break;
+		case NO_HUGE_PAGES:
+			use_huge_pages = 0;
+			break;
 		default:
 			fprintf(stderr, "unknown option '%s'\n",
 				option_index > 0 && option_index - 1 < argc &&
@@ -2022,6 +2066,26 @@ static void print_timing_info(int i, int niterations, struct timing_data *move, 
 	fflush(stdout);
 }
 
+static void *allocate_velocity_field(void)
+{
+	void *x;
+	int rc;
+
+#ifdef __linux__
+	if (use_huge_pages) {
+		rc = posix_memalign(&x, huge_page_size, sizeof(struct velocity_field));
+		if (!rc) {
+			madvise(x, sizeof(struct velocity_field), MADV_HUGEPAGE);
+			return x;
+		}
+		fprintf(stderr, "%s:%d: posix_memalign() failed, falling back to malloc()\n",
+			__FILE__, __LINE__);
+	}
+#endif
+	return malloc(sizeof(struct velocity_field));
+
+}
+
 int main(int argc, char *argv[])
 {
 	int i, t;
@@ -2037,22 +2101,23 @@ int main(int argc, char *argv[])
 	progtime.elapsed = 0;
 	gettimeofday(&progtime.begin, NULL);
 
-	/* Allocate a ton of memory. We allocate these rather than
-	 * declaring them statically because if DIM is too large, the
-	 * static data will not fit into the .bss (see https://en.wikipedia.org/wiki/.bss)
-	 */
-	vf = malloc(sizeof(struct velocity_field));
-	if (magic_fluid_flow)
-		old_vf = malloc(sizeof(struct velocity_field));
-	else
-		old_vf = NULL;
-
 	open_simplex_noise(3141592, &ctx);
 
 	setlocale(LC_ALL, "");
 	noise_scale = default_noise_scale;
 
 	process_options(argc, argv);
+
+	/* Allocate a ton of memory. We allocate these rather than
+	 * declaring them statically because if DIM is too large, the
+	 * static data will not fit into the .bss (see https://en.wikipedia.org/wiki/.bss)
+	 */
+	vf = allocate_velocity_field();
+	if (magic_fluid_flow)
+		old_vf = allocate_velocity_field();
+	else
+		old_vf = NULL;
+
 	set_automatic_options(random_mode);
 	create_vortices();
 

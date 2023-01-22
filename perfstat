@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# measure performance difference with huge pages vs. without
+
+echo
+echo Running without huge-pages
+echo
+
+# perf stat invocation cribbed from https://rigtorp.se/hugepages/
+sudo perf stat -e 'faults,dTLB-loads,dTLB-load-misses,cache-misses,cache-references' \
+   ./gaseous-giganticus --no-huge-pages --noise-scale 2.5 --velocity-factor 1300 --bands 10 \
+        -i input_image.png -o output_image -c 300 > nohugepages.txt 2>&1
+
+echo
+echo Running with huge-pages
+echo
+
+sudo perf stat -e 'faults,dTLB-loads,dTLB-load-misses,cache-misses,cache-references' \
+   ./gaseous-giganticus --noise-scale 2.5 --velocity-factor 1300 --bands 10 \
+        -i input_image.png -o output_image -c 300 > hugepages.txt 2>&1
+
+echo check nohugepages.txt and hugepages.txt
+
