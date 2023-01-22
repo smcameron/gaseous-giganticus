@@ -25,7 +25,6 @@ gaseous-giganticus \- make 6 images forming a cube map for a gas giant planet
 [ -L noise-levels ]
 [ -m speed-multiplier ]
 [ -n ]
-[ --no-huge-pages ]
 [ -N ]
 [ -o output-file-template ]
 [ -O opacity ]
@@ -210,13 +209,6 @@ Print a help message and exit.
 .TP
 -n, --no-fade
 Do not fade the image at all, divergences will be hidden
-.TP
---no-huge-pages
-Suppress usage of posix_memalign() and madvise() for large data structures
-and just use malloc() instead.  Performance with posix_memalign() and madvise()
-can be slightly faster than using malloc() for these large data structures.
-This optimization is only implemented for linux. The --no-huge-pages
-option will have no effect on platforms other than linux.
 .TP
 -N, --sequence-number
 Do not overwrite each of the six output images each time they are written
