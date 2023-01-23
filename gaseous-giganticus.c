@@ -1206,9 +1206,9 @@ static void maybe_save_equirectangular_images(char *output_file_prefix, int sequ
 		return;
 
 	if (sequence_number < 0)
-		sprintf(fname, "%s-eqr.png", output_file_prefix);
+		sprintf(fname, ".%s-eqr.png", output_file_prefix);
 	else
-		sprintf(fname, "%s%04d-eqr.png", output_file_prefix, sequence_number);
+		sprintf(fname, ".%s%04d-eqr.png", output_file_prefix, sequence_number);
 	h = equirect_height;
 	w = 2 * equirect_height;
 	equirect = calloc(1, h * w * 4);
@@ -1242,6 +1242,9 @@ static void maybe_save_equirectangular_images(char *output_file_prefix, int sequ
 	}
 	if (png_utils_write_png_image(fname, equirect, w, h, 1, 0))
 			fprintf(stderr, "Failed to write %s\n", fname);
+	else
+		if (rename(fname, &fname[1])) /* rename without leading '.' */
+			fprintf(stderr, "Failed to rename %s: %s\n", fname, strerror(errno));
 }
 
 static void save_output_images(char *output_file_prefix, int sequence_number, unsigned char *image[6], int has_alpha,
@@ -1255,11 +1258,13 @@ static void save_output_images(char *output_file_prefix, int sequence_number, un
 	printf("%s", msg); fflush(stdout);
 	for (i = 0; i < 6; i++) {
 		if (sequence_number < 0)
-			sprintf(fname, "%s%d.png", output_file_prefix, i);
+			sprintf(fname, ".%s%d.png", output_file_prefix, i);
 		else
-			sprintf(fname, "%s%04d-%d.png", output_file_prefix, i, sequence_number);
+			sprintf(fname, ".%s%04d-%d.png", output_file_prefix, i, sequence_number);
 		if (png_utils_write_png_image(fname, image[i], DIM, DIM, has_alpha, 0))
 			fprintf(stderr, "Failed to write %s\n", fname);
+		else if (rename(fname, &fname[1])) /* rename without the leading '.' */
+			fprintf(stderr, "Failed to rename %s: %s\n", fname, strerror(errno));
 	}
 	maybe_save_equirectangular_images(output_file_prefix, sequence_number, image, has_alpha);
 	backspace(strlen(msg));
