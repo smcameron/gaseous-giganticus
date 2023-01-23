@@ -121,6 +121,7 @@ static int random_mode;
 static int large_pixels = 0;
 static int export_equirect_image = 0;
 static int equirect_height = 0;
+static float cache_aware = (6.0f * XDIM * XDIM) / (float) NPARTICLES;
 
 struct timing_data {
 	struct timeval begin;
@@ -630,15 +631,70 @@ static const float face_to_xdim_multiplier[] = { 0.25, 0.5, 0.75, 0.0, 0.25, 0.2
 static const float face_to_ydim_multiplier[] = { 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0,
 						0.0, 2.0 / 3.0 };
 
+static void add_jitter(union vec3 *v)
+{
+	union vec3 jitter;
+
+	jitter.v.x = (((rand() % 10000) / 10000.0) - 0.5) / (2.5f * XDIM);
+	jitter.v.y = (((rand() % 10000) / 10000.0) - 0.5) / (2.5f * XDIM);
+	jitter.v.z = (((rand() % 10000) / 10000.0) - 0.5) / (2.5f * XDIM);
+	vec3_add_self(v, &jitter);
+	vec3_normalize_self(v);
+}
+
+/* Used if nparticles is >= number of pixels in cubemap */
+static void dense_cache_friendly_location(int p, int nparticles, union vec3 *pos)
+{
+	int f, i, j, n;
+
+	/* choose a face of the cubemap based on particle number */
+	f  = p / (nparticles / 6);
+	if (f > 5) /* integer math, e.g. 7999997 / (8000000 / 6) == 5, but 7999998 / (8000000 / 6) == 6 */
+		f = 5;
+
+	int locations_per_face = XDIM * XDIM;
+
+	n = p % locations_per_face;
+	i = n / XDIM;
+	j = n % XDIM;
+	*pos = fij_to_xyz(f, i, j, XDIM);
+	add_jitter(pos); /* gets rid of some weird artifacts */
+	vec3_mul_self(pos, (float) XDIM / 2.0f);
+}
+
+/* Used if nparticles is < number of pixels in cubemap */
+static void sparse_cache_friendly_location(int p, int nparticles, union vec3 *pos)
+{
+	int f, i, j, n;
+
+	/* choose a face of the cubemap based on particle number */
+	f  = p / (nparticles / 6);
+	if (f > 5) /* integer math, e.g. 7999997 / (8000000 / 6) == 5, but 7999998 / (8000000 / 6) == 6 */
+		f = 5;
+
+	int locations_per_face = XDIM * XDIM;
+	float pixels_per_particle = (float) locations_per_face / (float) (nparticles / 6.0f);
+	n = (int) ((p % (nparticles / 6)) * pixels_per_particle);
+	n = n + (rand() % (int) pixels_per_particle);
+	i = n / XDIM;
+	j = n % XDIM;
+	if (i > XDIM)
+		i = i % XDIM;
+	*pos = fij_to_xyz(f, i, j, XDIM);
+	add_jitter(pos); /* gets rid of some weird artifacts */
+	vec3_mul_self(pos, (float) XDIM / 2.0f);
+}
+
 /* place particles randomly on the surface of a sphere */
 static void init_particles(struct particle **pp, union vec3 **prev_particle_pos, const int nparticles)
 {
-	float x, y, z, xo, yo;
+	float xo, yo;
 	const int bytes_per_pixel = start_image_has_alpha ? 4 : 3;
 	unsigned char *pixel;
 	int pn, px, py;
 	struct fij fij = { 0, 0, 0 };
 	struct particle *p;
+	int cache_aware_limit = (int) (cache_aware * nparticles);
 
 	printf("Initializing %d particles", nparticles); fflush(stdout);
 	*pp = malloc(sizeof(**pp) * nparticles);
@@ -648,10 +704,14 @@ static void init_particles(struct particle **pp, union vec3 **prev_particle_pos,
 		*prev_particle_pos = calloc(nparticles, sizeof(**prev_particle_pos));
 
 	for (int i = 0; i < nparticles; i++) {
-		random_point_on_sphere((float) XDIM / 2.0f, &x, &y, &z);
-		p[i].pos.v.x = x;
-		p[i].pos.v.y = y;
-		p[i].pos.v.z = z;
+		if (i < cache_aware_limit) {
+			if (cache_aware_limit >= XDIM * XDIM * 6)
+				dense_cache_friendly_location(i, cache_aware_limit, &p[i].pos);
+			else
+				sparse_cache_friendly_location(i, cache_aware_limit, &p[i].pos);
+		} else {
+			random_point_on_sphere((float) XDIM / 2.0f, &p[i].pos.v.x, &p[i].pos.v.y, &p[i].pos.v.z);
+		}
 		if (cubemap_prefix) {
 			fij = xyz_to_fij(&p[i].pos, DIM);
 			if (fij.i < 0 || fij.i > DIM || fij.j < 0 || fij.j > DIM) {
@@ -680,9 +740,9 @@ static void init_particles(struct particle **pp, union vec3 **prev_particle_pos,
 			//printf("x,y = %d, %d, pn = %d\n", px, py, pn);
 		} else if (stripe) {
 			if (vertical_bands)
-				yo = (z + (float) DIM / 2.0) / (float) DIM;
+				yo = (p[i].pos.v.z + (float) DIM / 2.0) / (float) DIM;
 			else
-				yo = (y + (float) DIM / 2.0) / (float) DIM;
+				yo = (p[i].pos.v.y + (float) DIM / 2.0) / (float) DIM;
 			xo = 0.5; 
 			px = ((int) (xo * start_image_width)) * bytes_per_pixel;
 			py = (((int) (yo * start_image_height)) * start_image_bytes_per_row);
@@ -691,24 +751,24 @@ static void init_particles(struct particle **pp, union vec3 **prev_particle_pos,
 			if (!vertical_bands) {
 				float abs_cos_lat, longitude, latitude, x1, x2;
 
-				latitude = asinf(y / ((float) DIM / 2.0f));
+				latitude = asinf(p[i].pos.v.y / ((float) DIM / 2.0f));
 				yo = ((latitude + 0.5 * M_PI) / M_PI);
 				abs_cos_lat = fabs(cosf(latitude));
 				x2 = abs_cos_lat * 0.5 + 0.5;
 				x1 = -abs_cos_lat * 0.5 + 0.5;
-				longitude = atan2f(z, x);
+				longitude = atan2f(p[i].pos.v.z, p[i].pos.v.x);
 				xo = (cos(longitude) * abs_cos_lat * 0.5f) * (x2 - x1) + 0.5f;
 				px = ((int) (xo * start_image_width)) * bytes_per_pixel;
 				py = (((int) (yo * start_image_height)) * start_image_bytes_per_row);
 			} else {
 				float abs_cos_lat, longitude, latitude, x1, x2;
 
-				latitude = asinf(z / ((float) DIM / 2.0f));
+				latitude = asinf(p[i].pos.v.z / ((float) DIM / 2.0f));
 				yo = ((latitude + 0.5 * M_PI) / M_PI);
 				abs_cos_lat = fabs(cosf(latitude));
 				x2 = abs_cos_lat * 0.5 + 0.5;
 				x1 = -abs_cos_lat * 0.5 + 0.5;
-				longitude = atan2f(y, x);
+				longitude = atan2f(p[i].pos.v.y, p[i].pos.v.x);
 				xo = (cos(longitude) * abs_cos_lat * 0.5f) * (x2 - x1) + 0.5f;
 				px = ((int) (xo * start_image_width)) * bytes_per_pixel;
 				py = (((int) (yo * start_image_height)) * start_image_bytes_per_row);
@@ -1317,6 +1377,10 @@ static void usage(void)
 	fprintf(stderr, "   -I, --image-save-period: Interval of simulation iterations after which\n");
 	fprintf(stderr, "         to output images.  Default is every 25 iterations\n");
 	fprintf(stderr, "   -k, --cubemap: input 6 RGB or RGBA png cubemap images to initialize particle color\n");
+	fprintf(stderr, "   -K, --cache-aware fraction:  initialize the first fraction of particles in a cache\n");
+	fprintf(stderr, "         aware way (faster) and remaining particles with random locations.\n");
+	fprintf(stderr, "         E.g. -K 0.5 will initialize 50%% of particles in a cache aware way and\n");
+	fprintf(stderr, "         50%% randomly.\n");
 	fprintf(stderr, "   -l, --large-pixels: particles are 3x3 pixels instead of 1 pixel.  Allows\n");
 	fprintf(stderr, "                       for fewer particles and thus faster rendering, but this\n");
 	fprintf(stderr, "                       WILL leave visible artifacts at cubemap face boundaries.\n");
@@ -1394,6 +1458,7 @@ static struct option long_options[] = {
 	{ "input", required_argument, NULL, 'i' },
 	{ "image-save-period", required_argument, NULL, 'I' },
 	{ "cubemap", required_argument, NULL, 'k' },
+	{ "cache-aware", required_argument, NULL, 'K' },
 	{ "large-pixels", no_argument, NULL, 'l' },
 	{ "noise-levels", no_argument, NULL, 'L' },
 	{ "output", required_argument, NULL, 'o' },
@@ -1524,7 +1589,7 @@ static void process_options(int argc, char *argv[])
 
 	while (1) {
 		int option_index;
-		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:e:E:f:g:F:hHi:k:I:lL:nNm:o:O:p:PRr:sSt:T:Vv:w:W:x:z:",
+		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:e:E:f:g:F:hHi:k:K:I:lL:nNm:o:O:p:PRr:sSt:T:Vv:w:W:x:z:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -1624,6 +1689,13 @@ static void process_options(int argc, char *argv[])
 			break;
 		case 'k':
 			cubemap_prefix = optarg;
+			break;
+		case 'K':
+			process_float_option("cache-aware", optarg, &cache_aware);
+			if (cache_aware < 0.0 || cache_aware > 1.0) {
+				fprintf(stderr, "cache_aware (-K) option value must be between 0.0 and 1.0\n");
+				usage();
+			}
 			break;
 		case 'm':
 			process_float_option("speed-multiplier", optarg, &speed_multiplier);

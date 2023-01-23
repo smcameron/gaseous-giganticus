@@ -21,6 +21,8 @@ gaseous-giganticus \- make 6 images forming a cube map for a gas giant planet
 [ -H ]
 [ -i input-file ]
 [ -I image-save-period ]
+[ -k ]
+[ -K cache-aware-particles ]
 [ -l ]
 [ -L noise-levels ]
 [ -m speed-multiplier ]
@@ -139,6 +141,25 @@ By using this, the output of gaseous-giganticus can be used as input, and
 further swirling may be done, e.g. at different scales, or the output of
 other programs that produce cubemaps may be "swirled" to create
 for example cloud cover images for earthlike planets.
+.TP
+.TP
+-K --cache-aware
+Allow specifying what fraction of particles should be positioned in a
+cache-aware manner.  The allowable values are between 0.0 and 1.0.  0.0
+means 100 percent of particles should be initially placed randomly on the
+surface of the sphere.  1.0 means each particle should be placed on the
+surface of a sphere in such a way that particles close in memory will refer
+to velocity field array members also close in memory.  The regular grid
+like positions of cache-aware placement of particles can result in some
+artifacts, considerably mitigated by adding some jitter, and supplmented
+by using some random placement.  The default value is
+((1024.0 * 1024.0 * 6.0) / 8e6) so that of 8 million particles, about 6
+million -- just enough to cover every texel of the 1024x1024x6 cubemap
+-- are placed "cache-aware", and the remaining ~2M are placed randomly.
+(8000000 being the default number of particles.) Using 100 percent
+cache aware particle placement leads to a cache miss rate of about 50%,
+while 100% random particle placement leads to about a 60% cache miss
+rate.
 .TP
 -l, --large-pixels
 Use 3x3 pixels for particles instead of single pixel particles.  The allows getting away
