@@ -207,13 +207,6 @@ static double timeval_difference(struct timeval t1, struct timeval t2)
 	return elapsed_time;
 }
 
-static inline int float2int(double d)
-{
-	volatile union cast c;
-	c.d = d + 6755399441055744.0;
-	return c.l;
-}
-
 static float alphablendcolor(float underchannel, float underalpha, float overchannel, float overalpha)
 {
 	return overchannel * overalpha + underchannel * underalpha * (1.0 - overalpha);
@@ -246,11 +239,11 @@ static void fade_out_background(int f, struct color *c)
 				oc.b = (float) pixel[2] / 255.0f;
 				oc.a = 1.0;
 				nc = combine_color(&oc, c);
-				pixel[0] = float2int(255.0f * nc.r) & 0xff;
-				pixel[1] = float2int(255.0f * nc.g) & 0xff;
-				pixel[2] = float2int(255.0f * nc.b) & 0xff;
+				pixel[0] = ((int) (255.0f * nc.r)) & 0xff;
+				pixel[1] = ((int) (255.0f * nc.g)) & 0xff;
+				pixel[2] = ((int) (255.0f * nc.b)) & 0xff;
 			} else {
-				pixel[3] = float2int((float) pixel[3] * 0.9);
+				pixel[3] = (int) ((float) pixel[3] * 0.9);
 			}
 		}
 	}
@@ -355,9 +348,9 @@ static void paint_particle(int face, int i, int j, struct color *c, const int oc
 	oc.a = 1.0;
 	nc = combine_color(&oc, c);
 	if (!cloudmode) {
-		pixel[0] = float2int(255.0f * nc.r) & 0xff;
-		pixel[1] = float2int(255.0f * nc.g) & 0xff;
-		pixel[2] = float2int(255.0f * nc.b) & 0xff;
+		pixel[0] = ((int) (255.0f * nc.r)) & 0xff;
+		pixel[1] = ((int) (255.0f * nc.g)) & 0xff;
+		pixel[2] = ((int) (255.0f * nc.b)) & 0xff;
 		pixel[3] = 255;
 	} else {
 		union vec3 v;
@@ -381,16 +374,16 @@ static void paint_particle(int face, int i, int j, struct color *c, const int oc
 		n = n + 0.334f;
 		m = (nc.r + nc.g + nc.b) / 3.0f;
 #if 0
-		pixel[0] = float2int(255.0f * m) & 0xff;
+		pixel[0] = ((int) (255.0f * m)) & 0xff;
 		//pixel[0] = 255;
 		pixel[1] = pixel[0];
 		pixel[2] = pixel[0];
-		pixel[3] = float2int(n * (float) pixel[0]) & 0xff;
+		pixel[3] = ((int) (n * (float) pixel[0])) & 0xff;
 #endif
 		pixel[0] = 255;
 		pixel[1] = 255;
 		pixel[2] = 255;
-		pixel[3] = float2int(255.0f * m * n) & 0xff;
+		pixel[3] = ((int) (255.0f * m * n)) & 0xff;
 	}
 #endif
 }
@@ -557,20 +550,20 @@ static struct fij xyz_to_fij(const union vec3 *p, const int dim)
 			d = fabs(t.v.x);
 			if (t.v.x < 0) {
 				f = 3;
-				i = float2int((t.v.z / d) * fdim * 0.5 + 0.5 * (float) fdim);
+				i = (int) ((t.v.z / d) * fdim * 0.5 + 0.5 * (float) fdim);
 			} else {
 				f = 1;
-				i = float2int((-t.v.z / d)  * fdim * 0.5 + 0.5 * fdim);
+				i = (int) ((-t.v.z / d)  * fdim * 0.5 + 0.5 * fdim);
 			}
 		} else {
 			/* z is longest leg */
 			d = fabs(t.v.z);
 			if (t.v.z < 0) {
 				f = 2;
-				i = float2int((-t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
+				i = (int) ((-t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
 			} else {
 				f = 0;
-				i = float2int((t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
+				i = (int) ((t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
 #if 0
 				/* FIXME: we get this sometimes, not sure why. */
 				if (i < 0 || i > 1023)
@@ -578,7 +571,7 @@ static struct fij xyz_to_fij(const union vec3 *p, const int dim)
 #endif
 			}
 		}
-		j = float2int((-t.v.y / d) * fdim * 0.5 + 0.5 * fdim);
+		j = (int) ((-t.v.y / d) * fdim * 0.5 + 0.5 * fdim);
 	} else {
 		/* x is not longest leg, y or z must be. */
 		if (fabs(t.v.y) > fabs(t.v.z)) {
@@ -586,23 +579,23 @@ static struct fij xyz_to_fij(const union vec3 *p, const int dim)
 			d = fabs(t.v.y);
 			if (t.v.y < 0) {
 				f = 5;
-				j = float2int((-t.v.z / d) * fdim * 0.5 + 0.5 * fdim);
+				j = (int) ((-t.v.z / d) * fdim * 0.5 + 0.5 * fdim);
 			} else {
 				f = 4;
-				j = float2int((t.v.z / d) * fdim * 0.5 + 0.5 * fdim);
+				j = (int) ((t.v.z / d) * fdim * 0.5 + 0.5 * fdim);
 			}
-			i = float2int((t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
+			i = (int) ((t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
 		} else {
 			/* z is longest leg */
 			d = fabs(t.v.z);
 			if (t.v.z < 0) {
 				f = 2;
-				i = float2int((-t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
+				i = (int) ((-t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
 			} else {
 				f = 0;
-				i = float2int((t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
+				i = (int) ((t.v.x / d) * fdim * 0.5 + 0.5 * fdim);
 			}
-			j = float2int((-t.v.y / d) * fdim * 0.5 + 0.5 * fdim);
+			j = (int) ((-t.v.y / d) * fdim * 0.5 + 0.5 * fdim);
 		}
 	}
 
@@ -2029,8 +2022,8 @@ static void encode_vec2_in_red_green(unsigned char *image, int i, int j, union v
 
 	int p = j * DIM + i;
 	pixel = &image[p * (3 + flowmap_has_alpha)];
-	pixel[0] = float2int(255.0f * x) & 0xff;
-	pixel[1] = float2int(255.0f * y) & 0xff;
+	pixel[0] = ((int) (255.0f * x)) & 0xff;
+	pixel[1] = ((int) (255.0f * y)) & 0xff;
 	pixel[2] = 0;
 	if (flowmap_has_alpha)
 		pixel[3] = 255;
@@ -2063,9 +2056,9 @@ static void maybe_compute_flowmap(int nparticles)
 		pv.v.x *= scaling_factor;
 		pv.v.y *= scaling_factor;
 
-		i = float2int(p1.v.x);
-		j = float2int(p1.v.y);
-		f = float2int(p1.v.z);
+		i = (int) (p1.v.x);
+		j = (int) (p1.v.y);
+		f = (int) (p1.v.z);
 
 		encode_vec2_in_red_green(flowmap_image[f], i, j, &pv);
 	}
