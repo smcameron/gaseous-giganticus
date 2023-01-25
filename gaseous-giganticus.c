@@ -1191,10 +1191,13 @@ static void update_output_images(int image_threads, struct particle p[], const i
 	timing->elapsed += timeval_difference(timing->begin, timing->end);
 }
 
-static void maybe_save_equirectangular_images(char *output_file_prefix, int sequence_number,
+/* Save equirectangular image.  fname is filled in with the filename (or "", if no file is saved).
+ * fname is filled in with output_file_prefix + "-eqr.png" or XXXX-eqr.png" where XXXX is a
+ * sequence number.
+ */
+static void maybe_save_equirectangular_images(char *fname, char *output_file_prefix, int sequence_number,
 			unsigned char *image[6], int has_alpha)
 {
-	char fname[PATH_MAX];
 	int h, w, x, y;
 	unsigned char *input_pixel, *output_pixel, *equirect;
 	union vec3 p;
@@ -1202,8 +1205,10 @@ static void maybe_save_equirectangular_images(char *output_file_prefix, int sequ
 	float latitude, longitude;
 	int px, py;
 
-	if (!export_equirect_image)
+	if (!export_equirect_image) {
+		fname[0] = '\0';
 		return;
+	}
 
 	if (sequence_number < 0)
 		sprintf(fname, ".%s-eqr.png", output_file_prefix);
@@ -1240,33 +1245,59 @@ static void maybe_save_equirectangular_images(char *output_file_prefix, int sequ
 			output_pixel[3] = 255;
 		}
 	}
-	if (png_utils_write_png_image(fname, equirect, w, h, 1, 0))
-			fprintf(stderr, "Failed to write %s\n", fname);
-	else
-		if (rename(fname, &fname[1])) /* rename without leading '.' */
-			fprintf(stderr, "Failed to rename %s: %s\n", fname, strerror(errno));
+	if (png_utils_write_png_image(fname, equirect, w, h, 1, 0)) {
+		fprintf(stderr, "Failed to write %s\n", fname);
+		unlink(fname);
+		fname[0] = '\0';
+	}
+}
+
+/* Output files are created with a dot in the first character of the name initially, e.g. ".xxx.png"
+ * This function renames them to remove the leading "." ".xxx.png" --> "xxx.png"
+ */
+static void rename_output_files(char *fname[], int nfiles)
+{
+	for (int i = 0; i < nfiles; i++) {
+		char *f = fname[i];
+		if (!f)
+			continue;
+		if (f[0] != '.')
+			continue;
+		if (f[1] == '.' || f[1] == '\0') /* guard against "." and "..", paranoia */
+			continue;
+		if (rename(f, &f[1])) /* rename without the leading '.' */
+			fprintf(stderr, "Failed to rename %s to %s: %s\n", f, &f[1], strerror(errno));
+	}
 }
 
 static void save_output_images(char *output_file_prefix, int sequence_number, unsigned char *image[6], int has_alpha,
 			struct timing_data *timing)
 {
 	int i;
-	char fname[PATH_MAX];
+	char filename[7][PATH_MAX];
+	char *fname[7];
 	char *msg = "Saving Images";
 
 	gettimeofday(&timing->begin, NULL);
 	printf("%s", msg); fflush(stdout);
+	memset(fname, 0, sizeof(fname));
 	for (i = 0; i < 6; i++) {
 		if (sequence_number < 0)
-			sprintf(fname, ".%s%d.png", output_file_prefix, i);
+			sprintf(filename[i], ".%s%d.png", output_file_prefix, i);
 		else
-			sprintf(fname, ".%s%04d-%d.png", output_file_prefix, i, sequence_number);
-		if (png_utils_write_png_image(fname, image[i], DIM, DIM, has_alpha, 0))
-			fprintf(stderr, "Failed to write %s\n", fname);
-		else if (rename(fname, &fname[1])) /* rename without the leading '.' */
-			fprintf(stderr, "Failed to rename %s: %s\n", fname, strerror(errno));
+			sprintf(filename[i], ".%s%04d-%d.png", output_file_prefix, i, sequence_number);
+		if (png_utils_write_png_image(filename[i], image[i], DIM, DIM, has_alpha, 0)) {
+			fprintf(stderr, "Failed to write %s\n", filename[i]);
+			unlink(filename[i]);
+			fname[i] = NULL;
+			continue;
+		}
+		fname[i] = filename[i];
 	}
-	maybe_save_equirectangular_images(output_file_prefix, sequence_number, image, has_alpha);
+	filename[6][0] = '\0';
+	maybe_save_equirectangular_images(filename[6], output_file_prefix, sequence_number, image, has_alpha);
+	fname[6] = (filename[6][0] == '\0') ? NULL : filename[6];
+	rename_output_files(fname, 7);
 	backspace(strlen(msg));
 	printf("o");
 	fflush(stdout);
