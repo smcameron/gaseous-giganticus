@@ -1414,6 +1414,23 @@ static void usage(void)
 			"        -i input_image.png -o output_image\n");
 	fprintf(stderr, "   ./gaseous-giganticus -R -i input_image.png -o output_image\n");
 	fprintf(stderr, "\n");
+	fprintf(stderr, "Hints for speeding things up:\n\n");
+	fprintf(stderr, "0. If your system does CPU frequency scaling, make sure whatever governs this is\n");
+	fprintf(stderr, "   in a 'performance' mode rather than a 'power saving' mode. (On linux, see cpufreq-set)\n");
+	fprintf(stderr, "1. First choose bands, velocity-factor, and noise-scale with a small number of\n");
+	fprintf(stderr, "   particles, say, -p 50000. This will allow you to quickly iterate these values\n");
+	fprintf(stderr, "   to get the general shape of the turbulence and overall look of the output the\n");
+	fprintf(stderr, "   way you want it, and to determine roughly how many iterations are needed.\n");
+	fprintf(stderr, "2. Once you establish roughly how many iterations you need (200-250 is usually good)\n");
+	fprintf(stderr, "   use the -c and -I options.  PNG encoding takes significant time, so doing it\n");
+	fprintf(stderr, "   less frequently speeds things up considerably.\n");
+	fprintf(stderr, "3. Once you have the general shape of the turbulence, use the -d option to save\n");
+	fprintf(stderr, "   the velocity field to a file, and in subsequent runs, use -r to load it from\n");
+	fprintf(stderr, "   this file rather than calculating it from scratch each time.\n");
+	fprintf(stderr, "4. Next iterate on your input image colors.  For this, use -K 1.0 with 2500000 to\n");
+	fprintf(stderr, "   3000000 particles or so.\n");
+	fprintf(stderr, "5. Once satisfied with your input image, run without the -K option and with the default\n");
+	fprintf(stderr, "   of 8 million particles for better coverage and smoother output.\n");
 	exit(1);
 }
 
