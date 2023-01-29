@@ -84,7 +84,6 @@ static float ff[] = {
 };
 static int noise_levels = 4;
 static const int max_noise_levels = 7;
-static int cloudmode = 0;
 static float fade_rate = -1.0;
 static int save_texture_sequence = 0;
 static int magic_fluid_flow = 0; /* 0 = skip fluid dynamics, 1 = do fluid dynamics (not yet implemented) */
@@ -233,18 +232,14 @@ static void fade_out_background(int f, struct color *c)
 		for (i = 0; i < DIM; i++) {
 			p = j * DIM + i;
 			pixel = &output_image[f][p * 4];
-			if (!cloudmode) {
-				oc.r = (float) pixel[0] / 255.0f;
-				oc.g = (float) pixel[1] / 255.0f;
-				oc.b = (float) pixel[2] / 255.0f;
-				oc.a = 1.0;
-				nc = combine_color(&oc, c);
-				pixel[0] = ((int) (255.0f * nc.r)) & 0xff;
-				pixel[1] = ((int) (255.0f * nc.g)) & 0xff;
-				pixel[2] = ((int) (255.0f * nc.b)) & 0xff;
-			} else {
-				pixel[3] = (int) ((float) pixel[3] * 0.9);
-			}
+			oc.r = (float) pixel[0] / 255.0f;
+			oc.g = (float) pixel[1] / 255.0f;
+			oc.b = (float) pixel[2] / 255.0f;
+			oc.a = 1.0;
+			nc = combine_color(&oc, c);
+			pixel[0] = ((int) (255.0f * nc.r)) & 0xff;
+			pixel[1] = ((int) (255.0f * nc.g)) & 0xff;
+			pixel[2] = ((int) (255.0f * nc.b)) & 0xff;
 		}
 	}
 }
@@ -317,12 +312,11 @@ static float (*const fbmnoise4[])(float x, float y, float z, float w) = {
 	fbmnoise4_7oct,
 };
 
-static void paint_particle(int face, int i, int j, struct color *c, const int octaves)
+static void paint_particle(int face, int i, int j, struct color *c)
 {
 	unsigned char *pixel;
 	int p;
 	struct color oc, nc;
-	float (*const noise)(float x, float y, float z, float w) = fbmnoise4[octaves];
 
 	if (i < 0 || i > DIM - 1 || j < 0 || j > DIM - 1) {
 		/* FIXME: We get a handful of these, don't know why.
@@ -333,59 +327,16 @@ static void paint_particle(int face, int i, int j, struct color *c, const int oc
 	}
 	p = j * DIM + i;
 	pixel = &output_image[face][p * 4];
-#if 0
-	pixel[0] = (unsigned char) (255.0f * c->r);
-	pixel[1] = (unsigned char) (255.0f * c->g);
-	pixel[2] = (unsigned char) (255.0f * c->b);
-
-	pixel[3] = 255;
-	return;
-#else
 	/* FIXME, this is inefficient */
 	oc.r = (float) pixel[0] / 255.0f;
 	oc.g = (float) pixel[1] / 255.0f;
 	oc.b = (float) pixel[2] / 255.0f;
 	oc.a = 1.0;
 	nc = combine_color(&oc, c);
-	if (!cloudmode) {
-		pixel[0] = ((int) (255.0f * nc.r)) & 0xff;
-		pixel[1] = ((int) (255.0f * nc.g)) & 0xff;
-		pixel[2] = ((int) (255.0f * nc.b)) & 0xff;
-		pixel[3] = 255;
-	} else {
-		union vec3 v;
-		float n, m;
-		v = fij_to_xyz(face, i, j, DIM);
-		vec3_normalize_self(&v);
-		vec3_mul_self(&v, 3.6 * noise_scale);
-		n = noise(v.v.x, v.v.y, v.v.z, (w_offset + 10.0) * 3.33f);
-		if (n > 0.5f)
-			n = n * (1.0 + n - 0.5);
-		if (n < 0.0f)
-			n = n * (1.0 + n + 0.25);
-		if (n > 0.666f)
-			n = 0.666f;
-		else if (n < -0.333f)
-			n = -0.333f;
-
-		// else if (n < -1.0f)
-			//n = -1.0f;
-		// n = 0.5f * (n + 1.0f);
-		n = n + 0.334f;
-		m = (nc.r + nc.g + nc.b) / 3.0f;
-#if 0
-		pixel[0] = ((int) (255.0f * m)) & 0xff;
-		//pixel[0] = 255;
-		pixel[1] = pixel[0];
-		pixel[2] = pixel[0];
-		pixel[3] = ((int) (n * (float) pixel[0])) & 0xff;
-#endif
-		pixel[0] = 255;
-		pixel[1] = 255;
-		pixel[2] = 255;
-		pixel[3] = ((int) (255.0f * m * n)) & 0xff;
-	}
-#endif
+	pixel[0] = ((int) (255.0f * nc.r)) & 0xff;
+	pixel[1] = ((int) (255.0f * nc.g)) & 0xff;
+	pixel[2] = ((int) (255.0f * nc.b)) & 0xff;
+	pixel[3] = 255;
 }
 
 /* convert from cubemap coords to cartesian coords on surface of sphere */
@@ -1133,7 +1084,6 @@ static void *update_output_image_thread_fn(void *info)
 	struct image_thread_info *t = info;
 	struct particle *p = t->p;
 	int i, j;
-	const int octaves = noise_levels - 1;
 	/* 0.29289322 == 1 - 1/sqrt(2). */
 	const float opacity_filter[] = {0.5, 0.29289322, 0.5, 0.29289322, 0.5, 0.29289322, 0.5, 0.29289322};
 
@@ -1143,11 +1093,11 @@ static void *update_output_image_thread_fn(void *info)
 		if (p[i].fij.f != t->face)
 			continue;
 		p[i].c.a = opacity;
-		paint_particle(t->face, p[i].fij.i, p[i].fij.j, &p[i].c, octaves);
+		paint_particle(t->face, p[i].fij.i, p[i].fij.j, &p[i].c);
 		if (large_pixels) {
 			for (j = 0; j < 8; j++) {
 				p[i].c.a = opacity * opacity_filter[j];
-				paint_particle(t->face, p[i].fij.i + xo[j], p[i].fij.j + yo[j], &p[i].c, octaves);
+				paint_particle(t->face, p[i].fij.i + xo[j], p[i].fij.j + yo[j], &p[i].c);
 			}
 		}
 	}
@@ -1324,10 +1274,7 @@ static void find_darkest_pixel(unsigned char *image, int w, int h,
 			}
 		}
 	}
-	if (!cloudmode)
-		darkest_color->a = 0.01;
-	else
-		darkest_color->a = 0.5;
+	darkest_color->a = 0.01;
 	if (fade_rate > 0)
 		darkest_color->a = fade_rate;
 }
@@ -1382,7 +1329,6 @@ static void usage(void)
 	fprintf(stderr, "                   computing velocity field.  Default is 2.9\n");
 	fprintf(stderr, "   -c, --count : Number of iterations to run the simulation.\n");
 	fprintf(stderr, "                 Default is 1000\n");
-	fprintf(stderr, "   -C, --cloudmode: modulate image output by to produce clouds\n");
 	fprintf(stderr, "   -d, --dump-velocity-field : dump velocity field data to specified file\n");
 	fprintf(stderr, "                               (see -r option, below)\n");
 	fprintf(stderr, "   -D, --faderate : Rate at which particles fade, default = 0.01\n");
@@ -1481,7 +1427,6 @@ static struct option long_options[] = {
 	{ "pole-attenuation", required_argument, NULL, 'a' },
 	{ "bands", required_argument, NULL, 'b' },
 	{ "count", required_argument, NULL, 'c' },
-	{ "cloudmode", required_argument, NULL, 'C' },
 	{ "dump-velocity-field", required_argument, NULL, 'd' },
 	{ "faderate", required_argument, NULL, 'D' },
 	{ "input", required_argument, NULL, 'i' },
@@ -1618,7 +1563,7 @@ static void process_options(int argc, char *argv[])
 
 	while (1) {
 		int option_index;
-		c = getopt_long(argc, argv, "a:B:b:c:Cd:D:e:E:f:g:F:hHi:k:K:I:lL:nNm:o:O:p:PRr:sSt:T:Vv:w:W:x:z:",
+		c = getopt_long(argc, argv, "a:B:b:c:d:D:e:E:f:g:F:hHi:k:K:I:lL:nNm:o:O:p:PRr:sSt:T:Vv:w:W:x:z:",
 				long_options, &option_index);
 		if (c == -1)
 			break;
@@ -1638,9 +1583,6 @@ static void process_options(int argc, char *argv[])
 			break;
 		case 'c':
 			process_int_option("count", optarg, &niterations);
-			break;
-		case 'C':
-			cloudmode = 1;
 			break;
 		case 'd':
 			vf_dump_file = optarg;
