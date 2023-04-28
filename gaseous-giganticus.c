@@ -638,6 +638,10 @@ static void init_particles(struct particle **pp, union vec3 **prev_particle_pos,
 	int pn, px, py;
 	struct fij fij = { 0, 0, 0 };
 	struct particle *p;
+
+	if (cache_aware > 1.0) /* can happen if someone redefines DIM to be large */
+		cache_aware = 1.0;
+
 	int cache_aware_limit = (int) (cache_aware * nparticles);
 
 	printf("Initializing %d particles", nparticles); fflush(stdout);
