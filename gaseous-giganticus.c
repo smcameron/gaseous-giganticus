@@ -88,8 +88,8 @@ static float fade_rate = -1.0;
 static int save_texture_sequence = 0;
 static int magic_fluid_flow = 0; /* 0 = skip fluid dynamics, 1 = do fluid dynamics (not yet implemented) */
 
-#define DIM 1024 /* dimensions of cube map face images */
-#define VFDIM 2048 /* dimension of velocity field. (2 * DIM) is reasonable */
+#define DIM 2048 /* dimensions of cube map face images */
+#define VFDIM 4096 /* dimension of velocity field. (2 * DIM) is reasonable */
 static int vfdim = VFDIM;
 #define FDIM ((float) (DIM))
 #define XDIM DIM
@@ -2086,6 +2086,20 @@ static void print_timing_info(int i, int niterations, struct timing_data *move, 
 	fflush(stdout);
 }
 
+static void check_for_large_dimensions(void)
+{
+	if ((VFDIM > 2048 || DIM > 1024) && cache_aware > 0.0) {
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Cache aware particle placement (-K option) is %g and DIM=%d, VFDIM=%d\n",
+				cache_aware, DIM, VFDIM);
+		fprintf(stderr, "With these parameters, strange output may result.  If this happens\n");
+		fprintf(stderr, "you can try with '-K 0' option to turn off cache-aware particle placement\n");
+		fprintf(stderr, "and it should work better.\n");
+		fprintf(stderr, "See: https://github.com/smcameron/gaseous-giganticus/issues/10 for more details.\n");
+		fprintf(stderr, "\n");
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	int i, t;
@@ -2117,6 +2131,7 @@ int main(int argc, char *argv[])
 	noise_scale = default_noise_scale;
 
 	process_options(argc, argv);
+	check_for_large_dimensions();
 	set_automatic_options(random_mode);
 	create_vortices();
 
