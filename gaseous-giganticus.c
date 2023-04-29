@@ -88,8 +88,8 @@ static float fade_rate = -1.0;
 static int save_texture_sequence = 0;
 static int magic_fluid_flow = 0; /* 0 = skip fluid dynamics, 1 = do fluid dynamics (not yet implemented) */
 
-#define DIM 2048 /* dimensions of cube map face images */
-#define VFDIM 4096 /* dimension of velocity field. (2 * DIM) is reasonable */
+#define DIM 1024 /* dimensions of cube map face images */
+#define VFDIM 2048 /* dimension of velocity field. (2 * DIM) is reasonable */
 static int vfdim = VFDIM;
 #define FDIM ((float) (DIM))
 #define XDIM DIM
