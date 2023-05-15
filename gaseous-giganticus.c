@@ -1904,7 +1904,7 @@ static void create_vortex(int i)
 	quat_from_u2v(&vort[i].reverseq, &right_at_ya, &vort[i].p, &up);
 }
 
-static void create_vortices()
+static void create_vortices(void)
 {
 	int i;
 
@@ -1914,7 +1914,7 @@ static void create_vortices()
 
 #ifdef _WIN32
 #include <windows.h>
-static int get_num_cpus()
+static int get_num_cpus(void)
 {
 	SYSTEM_INFO sysinfo;
 	GetSystemInfo(&sysinfo);
@@ -1922,7 +1922,7 @@ static int get_num_cpus()
 }
 #else
 #ifdef unix
-static int get_num_cpus()
+static int get_num_cpus(void)
 {
 #ifdef _SC_NPROCESSORS_ONLN
 	return sysconf(_SC_NPROCESSORS_ONLN);
@@ -1933,7 +1933,7 @@ static int get_num_cpus()
 }
 #else
 #warning "get_num_cpus() not found. Assuming 1 CPU. Performance will not be good."
-static int get_num_cpus()
+static int get_num_cpus(void)
 {
 	return 1;
 }

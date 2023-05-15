@@ -46,7 +46,8 @@ endif
 
 MYCFLAGS=-DPREFIX=${PREFIX} ${DEBUGFLAG} ${PROFILEFLAG} ${OPTIMIZEFLAG}\
 	--pedantic -Wall -Wextra ${STOP_ON_WARN} -pthread -std=gnu99 ${RDYNAMIC} \
-	-Wno-extended-offsetof -Wno-gnu-folding-constant $(CFLAGS)
+	-Wno-extended-offsetof -Wno-gnu-folding-constant -Wstrict-prototypes \
+	$(CFLAGS)
 
 
 all:	gaseous-giganticus
