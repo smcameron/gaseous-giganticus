@@ -31,7 +31,7 @@ int png_utils_write_png_image(const char *filename, unsigned char *pixels, int w
 	png_infop info_ptr;
 	png_byte **row;
 	int x, y, *rc, rv, colordepth = 8;
-	int bytes_per_pixel = has_alpha ? 4 : 3;
+	const int bytes_per_pixel = has_alpha ? 4 : 3;
 	FILE *f;
 
 	rc = malloc(sizeof(*rc)); /* allocate on the heap to avoid longjmp clobbering rc */
@@ -91,7 +91,6 @@ int png_utils_write_png_image(const char *filename, unsigned char *pixels, int w
 	png_free(png_ptr, row);
 	*rc = 0; /* success */
 cleanup2:
-	bytes_per_pixel = 0; /* shut -Wextra up about longjmp clobbering this. */
 	png_destroy_write_struct(&png_ptr, &info_ptr);
 cleanup1:
 	fclose(f);
