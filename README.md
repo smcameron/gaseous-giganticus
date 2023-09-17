@@ -1,7 +1,9 @@
 # Gaseous Giganticus 
 
 This program is used to create procedurally generated gas giant planet cubemap
-textures for the game Space Nerds In Space.
+textures for the game Space Nerds In Space. Of course it can be used to create
+assets for other games,
+e.g. [Kerbal Space Program](https://forum.kerbalspaceprogram.com/topic/165285-planetary-texturing-guide-repository/#comment-3735392).
 
 # Sample Output
 
