@@ -1142,8 +1142,8 @@ static void update_output_images(int image_threads, struct particle p[], const i
  * fname is filled in with output_file_prefix + "-eqr.png" or XXXX-eqr.png" where XXXX is a
  * sequence number.
  */
-static void maybe_save_equirectangular_images(char *fname, char *output_file_prefix, int sequence_number,
-			unsigned char *image[6], int has_alpha)
+static void maybe_save_equirectangular_images(char *fname, char *finalname, char *output_file_prefix,
+			int sequence_number, unsigned char *image[6], int has_alpha)
 {
 	int h, w, x, y;
 	unsigned char *input_pixel, *output_pixel, *equirect;
@@ -1157,10 +1157,13 @@ static void maybe_save_equirectangular_images(char *fname, char *output_file_pre
 		return;
 	}
 
-	if (sequence_number < 0)
-		sprintf(fname, ".%s-eqr.png", output_file_prefix);
-	else
-		sprintf(fname, ".%s%04d-eqr.png", output_file_prefix, sequence_number);
+	if (sequence_number < 0) {
+		sprintf(fname, "%s-temp-eqr.png", output_file_prefix);
+		sprintf(finalname, "%s-eqr.png", output_file_prefix);
+	} else {
+		sprintf(fname, "%s%04d-temp-eqr.png", output_file_prefix, sequence_number);
+		sprintf(finalname, "%s%04d-eqr.png", output_file_prefix, sequence_number);
+	}
 	h = equirect_height;
 	w = 2 * equirect_height;
 	equirect = calloc(1, h * w * 4);
@@ -1199,21 +1202,23 @@ static void maybe_save_equirectangular_images(char *fname, char *output_file_pre
 	}
 }
 
-/* Output files are created with a dot in the first character of the name initially, e.g. ".xxx.png"
- * This function renames them to remove the leading "." ".xxx.png" --> "xxx.png"
+/* Output files are created in a temporary files with names stored in oldname[].
+ * This function renames them to their final new name.
+ * The reason for this is because mesh_viewer (in Space Nerds in Space) monitors
+ * the output files and reloads them as they change, so you can use it to monitor
+ * the progress of gaseous-giganticus. If we don't do this, then when the first file
+ * changes, mesh_viewer will reload all the files, which most of them won't be
+ * completely written when the first one changes.  By renaming them, the window for
+ * this race becomes *much* smaller.  Still a race, but in practice, no longer a
+ * problem.
  */
-static void rename_output_files(char *fname[], int nfiles)
+static void rename_output_files(char *oldname[], char *newname[], int nfiles)
 {
 	for (int i = 0; i < nfiles; i++) {
-		char *f = fname[i];
-		if (!f)
+		if (strcmp(oldname[i], "") == 0)
 			continue;
-		if (f[0] != '.')
-			continue;
-		if (f[1] == '.' || f[1] == '\0') /* guard against "." and "..", paranoia */
-			continue;
-		if (rename(f, &f[1])) /* rename without the leading '.' */
-			fprintf(stderr, "Failed to rename %s to %s: %s\n", f, &f[1], strerror(errno));
+		if (rename(oldname[i], newname[i]))
+			fprintf(stderr, "Failed to rename %s to %s: %s\n", oldname[i], newname[i], strerror(errno));
 	}
 }
 
@@ -1221,30 +1226,35 @@ static void save_output_images(char *output_file_prefix, int sequence_number, un
 			struct timing_data *timing)
 {
 	int i;
-	char filename[7][PATH_MAX];
-	char *fname[7];
+	char tempname[7][PATH_MAX];
+	char finalname[7][PATH_MAX];
+	char *t[7], *f[7];
 	char *msg = "Saving Images";
 
 	gettimeofday(&timing->begin, NULL);
 	printf("%s", msg); fflush(stdout);
-	memset(fname, 0, sizeof(fname));
 	for (i = 0; i < 6; i++) {
-		if (sequence_number < 0)
-			sprintf(filename[i], ".%s%d.png", output_file_prefix, i);
-		else
-			sprintf(filename[i], ".%s%04d-%d.png", output_file_prefix, i, sequence_number);
-		if (png_utils_write_png_image(filename[i], image[i], DIM, DIM, has_alpha, 0)) {
-			fprintf(stderr, "Failed to write %s\n", filename[i]);
-			unlink(filename[i]);
-			fname[i] = NULL;
+		if (sequence_number < 0) {
+			sprintf(tempname[i], "%s-temp%d.png", output_file_prefix, i);
+			sprintf(finalname[i], "%s%d.png", output_file_prefix, i);
+		} else {
+			sprintf(tempname[i], "%s-temp%04d-%d.png", output_file_prefix, i, sequence_number);
+			sprintf(finalname[i], "%s%04d-%d.png", output_file_prefix, i, sequence_number);
+		}
+		t[i] = tempname[i];
+		f[i] = finalname[i];
+		if (png_utils_write_png_image(tempname[i], image[i], DIM, DIM, has_alpha, 0)) {
+			fprintf(stderr, "Failed to write %s\n", tempname[i]);
+			unlink(tempname[i]);
 			continue;
 		}
-		fname[i] = filename[i];
 	}
-	filename[6][0] = '\0';
-	maybe_save_equirectangular_images(filename[6], output_file_prefix, sequence_number, image, has_alpha);
-	fname[6] = (filename[6][0] == '\0') ? NULL : filename[6];
-	rename_output_files(fname, 7);
+	tempname[6][0] = '\0';
+	maybe_save_equirectangular_images(tempname[6], finalname[6], output_file_prefix,
+						sequence_number, image, has_alpha);
+	t[6] = tempname[6];
+	f[6] = finalname[6];
+	rename_output_files(t, f, 7);
 	backspace(strlen(msg));
 	printf("o");
 	fflush(stdout);
