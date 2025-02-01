@@ -39,6 +39,10 @@
 #include "mtwist.h"
 #include "mathutils.h"
 #include "quat.h"
+/* you can override this in the via -DOSNFLOAT=float in CFLAGS */
+#ifndef OSNFLOAT
+#define OSNFLOAT double
+#endif
 #include "open-simplex-noise.h"
 #include "png_utils.h"
 #include "pthread_util.h"
