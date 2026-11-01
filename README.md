@@ -61,14 +61,15 @@ TLDR: Tabs, not spaces, snake_case, not CamelCase.
 To gain an understanding of how the program works, see [this slideshow](https://smcameron.github.io/space-nerds-in-space/gaseous-giganticus-slides/slideshow.html#1).
 Use arrow keys to navigate.  That slideshow does not work well on mobile, so find a real computer.
 
-If you're looking for a challenge, it would be really cool to do a more proper fluid simulation.
-This could *probably* be done by
-advecting the velocity field and then eliminating divergence from it, something like
-[what is described here](https://www.karlsims.com/fluid-flow.html),
-except done on the surface of a sphere instead of on a plane.  The velocity field is contained
-in the [vf structure](https://github.com/smcameron/gaseous-giganticus/blob/master/gaseous-giganticus.c#L115).
-Some framework code is already in place, we "just" need to implement the body of the functions
-advect_velocity_field() and remove_divergences().
+For a long time (from 2014 to 2026) I thought it would be cool to add a fluid dynamics simulation to
+gaseous-giganticus, and thought that this would likely produce better results.  When AI coding became
+pretty strong, I attempted a few times to get it to add fluid dynamics without success.  But then, I
+instead described to Claude Opus 5.5 what gaseous-giganticus does, and asked it to write a new program
+that does that, and also fluid dynamics, making the program from scratch.  This worked, and produced
+[gaseous-gusty-ball](https://github.com/smcameron/gaseous-gusty-ball).  However, adding fluid dynamics
+did not dramatically improve the look of the output.  Feel free to try it out though, I don't know if
+it's worse or better or about the same.  In any case, I'm no longer that interested in adding fluid
+dynamics to gaseous-giganticus.
 
 Please read CONTRIBUTING.md
 

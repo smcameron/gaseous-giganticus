@@ -2043,6 +2043,13 @@ static void maybe_compute_flowmap(int nparticles)
 
 static void advect_velocity_field(void)
 {
+	/* Note: I am no longer interested in adding fluid dynamics to gaseous giganticus,
+	 * because I had AI create gaseous-gusty-ball https://github.com/smcameron/gaseous-gusty-ball
+	 * which basically does the same thing as gaseous-giganticus plus fluid dynamics, and
+	 * it turns out it's not all that great.  Not better or worse, just different, but not the
+	 * dramatic improvement that I was hoping for.
+	 */
+
 	/* TODO: simulate fluid momentum via lagrangian advection of velocity field.
 	 * See: https://www.karlsims.com/fluid-flow.html
 	 * The basic idea is as follows:
@@ -2063,6 +2070,13 @@ static void advect_velocity_field(void)
 
 static void remove_divergences(void)
 {
+	/* Note: I am no longer interested in adding fluid dynamics to gaseous giganticus,
+	 * because I had AI create gaseous-gusty-ball https://github.com/smcameron/gaseous-gusty-ball
+	 * which basically does the same thing as gaseous-giganticus plus fluid dynamics, and
+	 * it turns out it's not all that great.  Not better or worse, just different, but not the
+	 * dramatic improvement that I was hoping for.
+	 */
+
 	/* TODO: figure out how to remove divergences introduced by advection step
 	 * from velocity field. See: https://www.karlsims.com/fluid-flow.html
 	 *
